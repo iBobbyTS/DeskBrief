@@ -240,6 +240,12 @@ struct ReportsView: View {
                 if viewModel.selectedKind != .day {
                     Spacer(minLength: 0)
 
+                    if viewModel.selectedVisualization == .heatmap,
+                       viewModel.selectedKind == .month || viewModel.selectedKind == .year {
+                        Toggle(text(.reportOverlayDailyTime), isOn: $viewModel.overlayDailyHeatmap)
+                            .toggleStyle(.switch)
+                    }
+
                     Toggle(text(.reportWorkdays), isOn: includeWorkdaysBinding)
                         .toggleStyle(.checkbox)
 
@@ -248,12 +254,6 @@ struct ReportsView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if viewModel.selectedVisualization == .heatmap,
-               viewModel.selectedKind == .month || viewModel.selectedKind == .year {
-                Toggle(text(.reportOverlayDailyTime), isOn: $viewModel.overlayDailyHeatmap)
-                    .toggleStyle(.switch)
-            }
 
             if viewModel.selectedVisualization == .barChart {
                 if hasAnyChartData {
