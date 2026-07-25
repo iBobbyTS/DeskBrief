@@ -127,6 +127,8 @@ nonisolated enum L10n {
         case settingsModelReasoningProcess
         case settingsGeneralTitle
         case settingsLanguage
+        case settingsDateFormat
+        case settingsTimeFormat
         case settingsAutoDeletionRetention
         case settingsDatabaseSectionTitle
         case settingsDatabaseEncryption
@@ -370,6 +372,8 @@ nonisolated enum L10n {
         case settingsModelLMStudioExplicitLoadUnloadModelTooltip
         case settingsIntervalTooltip
         case settingsLanguageTooltip
+        case settingsDateFormatTooltip
+        case settingsTimeFormatTooltip
         case settingsAutoDeletionRetentionTooltip
         case settingsDatabaseEncryptionTooltip
         case settingsDatabasePassphraseTooltip
@@ -464,6 +468,8 @@ nonisolated enum L10n {
             .settingsModelReasoningProcess: "思考过程",
             .settingsGeneralTitle: "通用设置",
             .settingsLanguage: "语言",
+            .settingsDateFormat: "日期格式",
+            .settingsTimeFormat: "时间格式",
             .settingsAutoDeletionRetention: "自动删除截屏",
             .settingsDatabaseSectionTitle: "数据库设置",
             .settingsDatabaseEncryption: "数据库加密",
@@ -709,6 +715,8 @@ nonisolated enum L10n {
             .settingsScreenshotStorageLocation: "截屏保存位置",
             .settingsScreenshotStorageLocationTooltip: "保存到*硬盘*时安全级别和其他用户文件一致，别的用户无法直接访问，如果对隐私要求较高，可选择保存到内存，app退出/系统重启等操作会导致没有分析过的截屏直接消失",
             .settingsLanguageTooltip: "建议选择和截屏分析、工作内容总结填入的信息相同的语言",
+            .settingsDateFormatTooltip: "用于界面中显示的日期。月报和年报时间轴会省略年份。",
+            .settingsTimeFormatTooltip: "用于界面中显示的时间。",
             .settingsAutoDeletionRetentionTooltip: "自动删除超过保留期限的待分析截屏文件。保留期删除仅处理 screenshots 根目录下的 JPEG 文件；App 启动时会清理 preview/ 和 temp/ 子目录中的残留临时截屏。",
             .settingsDatabaseEncryptionTooltip: "*关闭*：别的app只要可以读取这个文件，就可以读取数据。\n*开启*：别的app必须输入密钥才能读取其中的数据，您可随时在app内修改，也可在钥匙串里查看。\n密钥会在苹果Keychain里安全存储，每次打开app时自动解密数据库。",
             .settingsDatabasePassphraseTooltip: "输入新的数据库密钥后点击确定。当前密钥不会在 App 内显示，可在钥匙串 app 里查看。",
@@ -799,6 +807,8 @@ nonisolated enum L10n {
             .settingsModelReasoningProcess: "Reasoning",
             .settingsGeneralTitle: "General Settings",
             .settingsLanguage: "Language",
+            .settingsDateFormat: "Date Format",
+            .settingsTimeFormat: "Time Format",
             .settingsAutoDeletionRetention: "Auto-Delete Screenshots",
             .settingsDatabaseSectionTitle: "Database Settings",
             .settingsDatabaseEncryption: "Database Encryption",
@@ -1044,6 +1054,8 @@ nonisolated enum L10n {
             .settingsScreenshotStorageLocation: "Screenshot Storage",
             .settingsScreenshotStorageLocationTooltip: "When saved to *Disk*, the security level is consistent with other user files and cannot be directly accessed by other users. If you have high privacy requirements, choose memory storage. Unanalyzed screenshots will be lost when the app exits or system restarts.",
             .settingsLanguageTooltip: "It is recommended to use the same language as the information entered for screenshot analysis and work content summary.",
+            .settingsDateFormatTooltip: "Used for dates shown in the interface. Month and year report timelines omit the year.",
+            .settingsTimeFormatTooltip: "Used for times shown in the interface.",
             .settingsAutoDeletionRetentionTooltip: "Automatically delete pending screenshot files older than the selected retention period. Retention cleanup only deletes JPEG files in the root screenshots directory; app launch cleans up leftover transient screenshots in preview/ and temp/.",
             .settingsDatabaseEncryptionTooltip: "*Off*: Other apps can read the data if they can read this file.\n*On*: Other apps must enter the key before reading the data. You can change it in the app at any time, or view it in Keychain Access.\nThe key is stored securely in Apple Keychain and automatically decrypts the database each time the app opens.",
             .settingsDatabasePassphraseTooltip: "Enter a new database key, then click Confirm. The current key is not shown in the app and can be viewed in Keychain Access.",
@@ -1076,70 +1088,6 @@ nonisolated enum L10n {
             return string(.preservedOtherCategoryDisplay, language: language)
         }
         return categoryName
-    }
-
-    static func statusDateFormatter(language: AppLanguage = .current) -> DateFormatter {
-        dateFormatter(template: "yMdHm", language: language, timeZone: .current)
-    }
-
-    static func analysisRunTimeFormatter(language: AppLanguage = .current) -> DateFormatter {
-        dateFormatter(template: "MdHm", language: language, timeZone: .current)
-    }
-
-    static func timestampFormatter(language: AppLanguage = .current) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = language.locale
-        formatter.timeZone = .current
-
-        switch language {
-        case .simplifiedChinese:
-            formatter.dateFormat = "yyyy/M/d HH:mm:ss.SSS"
-        case .english:
-            formatter.dateFormat = "M/d/yyyy, HH:mm:ss.SSS"
-        }
-
-        return formatter
-    }
-
-    static func reportDayFormatter(language: AppLanguage = .current) -> DateFormatter {
-        dateFormatter(template: "yMMMd", language: language)
-    }
-
-    static func reportDayDisplayText(for dayStart: Date, language: AppLanguage = .current) -> String {
-        let dayText = reportDayFormatter(language: language).string(from: dayStart)
-        let weekdayText = dateFormatter(template: "EEEE", language: language, timeZone: .current).string(from: dayStart)
-        return "\(dayText)·\(weekdayText)"
-    }
-
-    static func reportMonthFormatter(language: AppLanguage = .current) -> DateFormatter {
-        dateFormatter(template: "yMMMM", language: language)
-    }
-
-    static func reportYearFormatter(language: AppLanguage = .current) -> DateFormatter {
-        dateFormatter(template: "y", language: language)
-    }
-
-    static func reportTickFormatter(for interval: DateInterval, language: AppLanguage = .current) -> DateFormatter {
-        switch interval.duration {
-        case ..<86_400.0:
-            return dateFormatter(template: "Hm", language: language, timeZone: .current)
-        case ..<1_209_600.0:
-            return dateFormatter(template: "MdHm", language: language, timeZone: .current)
-        case ..<3_888_000.0:
-            return dateFormatter(template: "Md", language: language, timeZone: .current)
-        case ..<34_560_000.0:
-            return dateFormatter(template: "MMMd", language: language, timeZone: .current)
-        default:
-            return dateFormatter(template: "yM", language: language, timeZone: .current)
-        }
-    }
-
-    static func reportFinalTickFormatter(language: AppLanguage = .current) -> DateFormatter {
-        dateFormatter(template: "MMMd", language: language, timeZone: .current)
-    }
-
-    static func dailyHeatmapTickFormatter(language: AppLanguage = .current) -> DateFormatter {
-        dateFormatter(template: "Hm", language: language, timeZone: .current)
     }
 
     static func notificationScreenshotCount(_ count: Int, language: AppLanguage = .current) -> String {
@@ -1473,14 +1421,6 @@ nonisolated enum L10n {
 
     private static func table(for language: AppLanguage) -> [Key: String] {
         tables[language] ?? [:]
-    }
-
-    private static func dateFormatter(template: String, language: AppLanguage, timeZone: TimeZone? = nil) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = language.locale
-        formatter.timeZone = timeZone
-        formatter.setLocalizedDateFormatFromTemplate(template)
-        return formatter
     }
 
     private static func minuteUnit(_ value: Int) -> String {

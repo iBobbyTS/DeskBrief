@@ -36,7 +36,7 @@ enum MenuBarStatusPresentation {
                 stoppingStage.statusSummaryLocalizationKey,
                 language: language,
                 arguments: [
-                    L10n.statusDateFormatter(language: language).string(from: startedAt),
+                    AppTimeFormatting.dateTimeString(from: startedAt, language: language),
                     state.completedCount,
                     state.totalCount
                 ]
@@ -47,7 +47,7 @@ enum MenuBarStatusPresentation {
             .menuSummaryAnalyzing,
             language: language,
             arguments: [
-                L10n.statusDateFormatter(language: language).string(from: startedAt),
+                AppTimeFormatting.dateTimeString(from: startedAt, language: language),
                 state.completedCount,
                 state.totalCount
             ]

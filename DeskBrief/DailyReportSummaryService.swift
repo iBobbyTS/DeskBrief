@@ -1191,11 +1191,6 @@ final class DailyReportSummaryService {
         summaryInstruction: String,
         language: AppLanguage
     ) -> String {
-        let timeFormatter = DateFormatter()
-        timeFormatter.locale = language.locale
-        timeFormatter.timeZone = .current
-        timeFormatter.setLocalizedDateFormatFromTemplate("HH:mm")
-
         let activityLines = activityItems.map { item in
             let durationStyle: DurationDisplayStyle = item.durationMinutes >= 60 ? .hourAndMinute : .minute
             let durationText = L10n.durationText(
@@ -1204,7 +1199,12 @@ final class DailyReportSummaryService {
                 language: language
             )
             let resolvedSummary = item.itemSummaryText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return "\(timeFormatter.string(from: item.capturedAt)) | \(durationText) | \(item.categoryName) | \(resolvedSummary)"
+            let timeText = AppTimeFormatting.string(
+                from: item.capturedAt,
+                format: .twentyFourHour,
+                language: language
+            )
+            return "\(timeText) | \(durationText) | \(item.categoryName) | \(resolvedSummary)"
         }
 
         return L10n.dailyReportSummaryPrompt(

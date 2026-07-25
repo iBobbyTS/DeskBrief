@@ -52,6 +52,8 @@ struct SettingsView: View {
         static let servicePickerWidth: CGFloat = 220
         static let imageAnalysisMethodPickerWidth: CGFloat = 320
         static let reportPickerWidth: CGFloat = 160
+        static let dateFormatPickerWidth: CGFloat = 240
+        static let timeFormatPickerWidth: CGFloat = 180
         static let categoryColorWidth: CGFloat = 72
         static let analysisStartupModePickerWidth: CGFloat = 260
         static let characterCounterBottomPadding: CGFloat = 6
@@ -88,6 +90,7 @@ struct SettingsView: View {
     @State private var pendingDatabasePassphrase = ""
     @State private var pendingDatabaseEncryptionAction: DatabaseEncryptionAction?
     @State private var selectedTab: SettingsTab
+    @State private var formattingPreviewDate: Date
 
     @State private var showIntervalTooltip = false
 
@@ -107,6 +110,7 @@ struct SettingsView: View {
         self.windowState = windowState
         self.logStore = logStore
         _selectedTab = State(initialValue: selectedTab)
+        _formattingPreviewDate = State(initialValue: Date())
     }
 
     private var language: AppLanguage {
@@ -348,10 +352,11 @@ struct SettingsView: View {
                     HStack(spacing: 12) {
                         Text(text(.settingsAnalysisScheduledTime))
                         Spacer()
-                        DatePicker(
-                            "",
+                        AppTimePicker(
+                            title: "",
                             selection: analysisTimeBinding,
-                            displayedComponents: [.hourAndMinute]
+                            format: settingsStore.timeFormat,
+                            language: language
                         )
                         .labelsHidden()
                         .datePickerStyle(.field)
@@ -1037,6 +1042,44 @@ struct SettingsView: View {
                         .labelsHidden()
                         .fixedSize()
                         .frame(width: Layout.reportPickerWidth, alignment: .trailing)
+                    }
+                    .frame(width: fieldWidth, alignment: .trailing)
+                }
+
+                Divider()
+
+                proportionalFieldRow(text(.settingsDateFormat), tooltip: text(.settingsDateFormatTooltip)) { fieldWidth in
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        Picker("", selection: $settingsStore.dateFormat) {
+                            ForEach(AppDateFormat.allCases) { option in
+                                Text(option.preview(for: formattingPreviewDate, language: language))
+                                    .tag(option)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: Layout.dateFormatPickerWidth, alignment: .trailing)
+                        .accessibilityIdentifier("settings.dateFormatPicker")
+                    }
+                    .frame(width: fieldWidth, alignment: .trailing)
+                }
+
+                Divider()
+
+                proportionalFieldRow(text(.settingsTimeFormat), tooltip: text(.settingsTimeFormatTooltip)) { fieldWidth in
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        Picker("", selection: $settingsStore.timeFormat) {
+                            ForEach(AppTimeFormat.allCases) { option in
+                                Text(option.pickerLabel(for: formattingPreviewDate, language: language))
+                                    .tag(option)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: Layout.timeFormatPickerWidth, alignment: .trailing)
+                        .accessibilityIdentifier("settings.timeFormatPicker")
                     }
                     .frame(width: fieldWidth, alignment: .trailing)
                 }

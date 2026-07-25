@@ -967,7 +967,11 @@ nonisolated struct AppLogEntry: Identifiable, Hashable {
     }
 
     func exportText(in language: AppLanguage) -> String {
-        let timestamp = L10n.timestampFormatter(language: language).string(from: createdAt)
+        let timestamp = AppTimeFormatting.dateTimeString(
+            from: createdAt,
+            precision: .millisecond,
+            language: language
+        )
         return "\(timestamp) [\(level.title(in: language))] \(message)"
     }
 }

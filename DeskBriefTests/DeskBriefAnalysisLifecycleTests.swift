@@ -292,7 +292,15 @@ extension DeskBriefTests {
         #expect(summaryRun.analysisRunID == analysisRun.id)
         #expect(storedReport.dailySummaryText == "完成日报通知")
         #expect(message.body.contains("已分析 1 张截屏"))
-        #expect(message.body.contains(L10n.reportDayDisplayText(for: dayOne, language: .simplifiedChinese)))
+        #expect(
+            message.body.contains(
+                AppDateFormatting.dayWithWeekdayString(
+                    from: dayOne,
+                    format: .localizedLong,
+                    language: .simplifiedChinese
+                )
+            )
+        )
     }
 
     @MainActor

@@ -101,6 +101,10 @@ DeskBrief is a compact macOS menu bar utility. Its UI should feel like a focused
 - All visible UI strings must go through `AppLocalization.swift`.
 - When adding or changing UI copy, update both Chinese and English entries in the same change.
 - Prefer concise labels that fit in existing row widths before increasing layout constants.
+- All visible calendar dates use `AppDateFormatting`, and all visible clock times use `AppTimeFormatting` or the `AppTimePicker` wrapper. Storage filenames and Unix timestamps are data protocols rather than UI formatting.
+- General Settings exposes a date-format picker immediately below Language. Its five option labels use one date captured when the Settings view opens, so the examples do not change while the window remains open.
+- General Settings also exposes 12-hour and 24-hour time formats. Date and time preferences apply immediately through the existing settings-change notification.
+- Visible dates include the year by default. Month and year report timeline axes are the explicit exception and use the selected date format with the year omitted.
 
 ## Verification
 

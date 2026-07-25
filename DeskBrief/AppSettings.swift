@@ -76,6 +76,20 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var dateFormat: AppDateFormat {
+        didSet {
+            userDefaults.set(dateFormat.rawValue, forKey: AppDateFormat.userDefaultsKey)
+            notifySettingsChanged()
+        }
+    }
+
+    @Published var timeFormat: AppTimeFormat {
+        didSet {
+            userDefaults.set(timeFormat.rawValue, forKey: AppTimeFormat.userDefaultsKey)
+            notifySettingsChanged()
+        }
+    }
+
     @Published var summaryInstruction: String {
         didSet {
             userDefaults.set(summaryInstruction, forKey: Keys.summaryInstruction)
@@ -300,6 +314,12 @@ final class SettingsStore: ObservableObject {
 
         let savedAppLanguageRaw = userDefaults.string(forKey: AppLanguage.userDefaultsKey)
         let savedAppLanguage = AppLanguage(rawValue: savedAppLanguageRaw ?? "") ?? .defaultValue
+        let savedDateFormat = AppDateFormat(
+            rawValue: userDefaults.string(forKey: AppDateFormat.userDefaultsKey) ?? ""
+        ) ?? .localizedLong
+        let savedTimeFormat = AppTimeFormat(
+            rawValue: userDefaults.string(forKey: AppTimeFormat.userDefaultsKey) ?? ""
+        ) ?? .twentyFourHour
 
         let savedSummaryInstruction = readString(key: Keys.summaryInstruction)
             ?? AppDefaults.defaultSummaryInstruction(language: savedAppLanguage)
@@ -360,6 +380,8 @@ final class SettingsStore: ObservableObject {
         screenshotStorageLocation = savedScreenshotStorageLocation
         autoAnalysisRequiresCharger = savedAutoAnalysisRequiresCharger
         appLanguage = savedAppLanguage
+        dateFormat = savedDateFormat
+        timeFormat = savedTimeFormat
         summaryInstruction = savedSummaryInstruction
         provider = savedProvider
         apiBaseURL = savedBaseURL

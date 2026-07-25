@@ -541,8 +541,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func setupStatusItem() {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.isVisible = true
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "chart.bar.doc.horizontal", accessibilityDescription: text(.statusAccessibilityDescription, language: .current))
+            button.imagePosition = .imageOnly
         }
         statusItem.menu = menu
         self.statusItem = statusItem
@@ -1197,7 +1199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 statusSummaryItem.title = text(
                     .menuSummaryPending,
                     arguments: [
-                        statusDateFormatter(language: language).string(from: earliestScreenshotTime),
+                        AppTimeFormatting.dateTimeString(from: earliestScreenshotTime, language: language),
                         pendingScreenshots.count,
                     ],
                     language: language
@@ -1205,7 +1207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             } else if let nextScreenshotDate = screenshotService?.nextScreenshotDate {
                 statusSummaryItem.title = text(
                     .menuNextScreenshotAt,
-                    arguments: [statusDateFormatter(language: language).string(from: nextScreenshotDate)],
+                    arguments: [AppTimeFormatting.dateTimeString(from: nextScreenshotDate, language: language)],
                     language: language
                 )
             } else {
@@ -1258,6 +1260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "chart.bar.doc.horizontal", accessibilityDescription: text(.statusAccessibilityDescription, language: language))
+            button.imagePosition = .imageOnly
         }
 
         currentStatusMenuItem.title = text(.menuCurrentStatus, language: language)
@@ -1305,10 +1308,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func text(_ key: L10n.Key, arguments: [CVarArg], language: AppLanguage) -> String {
         L10n.string(key, language: language, arguments: arguments)
-    }
-
-    private func statusDateFormatter(language: AppLanguage) -> DateFormatter {
-        L10n.statusDateFormatter(language: language)
     }
 
     private func averageDurationFormatter(language: AppLanguage) -> NumberFormatter {

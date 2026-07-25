@@ -30,15 +30,103 @@ extension DeskBriefTests {
     @Test func reportDayDisplayTextIncludesLocalizedWeekdaySuffix() async throws {
         let dayStart = makeScreenshotDate(year: 2026, month: 4, day: 27, hour: 9, minute: 0)
 
-        #expect(L10n.reportDayDisplayText(for: dayStart, language: .simplifiedChinese) == "2026年4月27日·星期一")
-        #expect(L10n.reportDayDisplayText(for: dayStart, language: .english) == "Apr 27, 2026·Monday")
+        #expect(
+            AppDateFormatting.dayWithWeekdayString(
+                from: dayStart,
+                format: .localizedLong,
+                language: .simplifiedChinese
+            ) == "2026年4月27日·星期一"
+        )
+        #expect(
+            AppDateFormatting.dayWithWeekdayString(
+                from: dayStart,
+                format: .localizedLong,
+                language: .english
+            ) == "Apr. 27th, 2026·Monday"
+        )
     }
 
-    @Test func analysisRunTimeFormatterUsesLocalizedDateOrder() async throws {
+    @Test func sharedDateFormattingSupportsEveryUserSelectableFormat() async throws {
+        let date = makeScreenshotDate(year: 2026, month: 7, day: 25, hour: 21, minute: 5)
+
+        #expect(AppDateFormat.localizedLong.preview(for: date, language: .simplifiedChinese) == "2026年7月25日")
+        #expect(AppDateFormat.localizedLong.preview(for: date, language: .english) == "Jul. 25th, 2026")
+        #expect(AppDateFormat.yearMonthDaySlashes.preview(for: date, language: .english) == "2026/7/25")
+        #expect(AppDateFormat.yearMonthDayHyphens.preview(for: date, language: .english) == "2026-7-25")
+        #expect(AppDateFormat.monthDayYearSlashes.preview(for: date, language: .english) == "7/25/2026")
+        #expect(AppDateFormat.monthDayYearHyphens.preview(for: date, language: .english) == "7-25-2026")
+    }
+
+    @Test func sharedDateFormattingHandlesEnglishOrdinalExceptions() async throws {
+        let eleventh = makeScreenshotDate(year: 2026, month: 7, day: 11, hour: 9, minute: 0)
+        let twentyFirst = makeScreenshotDate(year: 2026, month: 7, day: 21, hour: 9, minute: 0)
+
+        #expect(AppDateFormat.localizedLong.preview(for: eleventh, language: .english) == "Jul. 11th, 2026")
+        #expect(AppDateFormat.localizedLong.preview(for: twentyFirst, language: .english) == "Jul. 21st, 2026")
+    }
+
+    @Test func reportTimelineDateFormattingOmitsOnlyTheYear() async throws {
+        let date = makeScreenshotDate(year: 2026, month: 7, day: 25, hour: 21, minute: 5)
+
+        #expect(
+            AppDateFormatting.string(
+                from: date,
+                style: .monthDay,
+                format: .localizedLong,
+                language: .simplifiedChinese
+            ) == "7月25日"
+        )
+        #expect(
+            AppDateFormatting.string(
+                from: date,
+                style: .monthDay,
+                format: .localizedLong,
+                language: .english
+            ) == "Jul. 25th"
+        )
+        #expect(
+            AppDateFormatting.string(
+                from: date,
+                style: .monthDay,
+                format: .yearMonthDayHyphens,
+                language: .english
+            ) == "7-25"
+        )
+    }
+
+    @Test func sharedTimeFormattingSupportsTwelveAndTwentyFourHourClocks() async throws {
         let date = makeScreenshotDate(year: 2026, month: 4, day: 27, hour: 9, minute: 5)
 
-        #expect(L10n.analysisRunTimeFormatter(language: .simplifiedChinese).string(from: date) == "4/27 09:05")
-        #expect(L10n.analysisRunTimeFormatter(language: .english).string(from: date) == "4/27, 09:05")
+        #expect(AppTimeFormatting.string(from: date, format: .twentyFourHour, language: .english) == "09:05")
+        #expect(AppTimeFormatting.string(from: date, format: .twelveHour, language: .english) == "9:05 AM")
+        #expect(AppTimeFormatting.string(from: date, format: .twelveHour, language: .simplifiedChinese) == "上午 9:05")
+        #expect(
+            AppTimeFormatting.dateTimeString(
+                from: date,
+                dateFormat: .yearMonthDaySlashes,
+                timeFormat: .twentyFourHour,
+                language: .english
+            ) == "2026/4/27 09:05"
+        )
+    }
+
+    @Test func heatmapEndOfDayUsesSelectedClockFormat() async throws {
+        let midnight = makeScreenshotDate(year: 2026, month: 4, day: 28, hour: 0, minute: 0)
+
+        #expect(
+            AppTimeFormatting.endOfDayString(
+                for: midnight,
+                format: .twentyFourHour,
+                language: .english
+            ) == "24:00"
+        )
+        #expect(
+            AppTimeFormatting.endOfDayString(
+                for: midnight,
+                format: .twelveHour,
+                language: .english
+            ) == "12:00 AM"
+        )
     }
 
     @Test func inMemoryKeychainStoreSupportsUITestCredentialFlow() async throws {
@@ -1020,6 +1108,36 @@ extension DeskBriefTests {
         #expect(AnalysisStartupMode.manual.title(in: .english) == "Do Not Auto Start")
         #expect(AnalysisStartupMode.scheduled.title(in: .english) == "Scheduled Start")
         #expect(AnalysisStartupMode.realtime.title(in: .english) == "Start Immediately After Screenshot")
+    }
+
+    @MainActor
+    @Test func settingsStorePersistsDateAndTimeFormats() async throws {
+        let databaseURL = makeTemporaryDatabaseURL()
+        let suiteName = "DeskBriefTests.\(UUID().uuidString)"
+        let userDefaults = try #require(UserDefaults(suiteName: suiteName))
+        let keychain = KeychainStore(service: suiteName)
+
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+            keychain.set("", for: AppDefaults.apiKeyAccount)
+            keychain.set("", for: AppDefaults.workContentSummaryAPIKeyAccount)
+            try? FileManager.default.removeItem(at: databaseURL)
+        }
+
+        let database = try AppDatabase(databaseURL: databaseURL)
+        let store = SettingsStore(database: database, userDefaults: userDefaults, keychain: keychain)
+
+        #expect(store.dateFormat == .localizedLong)
+        #expect(store.timeFormat == .twentyFourHour)
+
+        store.dateFormat = .monthDayYearHyphens
+        store.timeFormat = .twelveHour
+
+        let reloadedStore = SettingsStore(database: database, userDefaults: userDefaults, keychain: keychain)
+        #expect(reloadedStore.dateFormat == .monthDayYearHyphens)
+        #expect(reloadedStore.timeFormat == .twelveHour)
+        #expect(userDefaults.string(forKey: AppDateFormat.userDefaultsKey) == AppDateFormat.monthDayYearHyphens.rawValue)
+        #expect(userDefaults.string(forKey: AppTimeFormat.userDefaultsKey) == AppTimeFormat.twelveHour.rawValue)
     }
 
     @Test func chargerRequirementLabelAndVisibilityMatchAutomaticStartupOnly() async throws {

@@ -407,7 +407,7 @@ nonisolated enum AppNotificationMessageBuilder {
             return L10n.string(
                 .notificationDailyReportForDay,
                 language: language,
-                arguments: [L10n.reportDayDisplayText(for: dayStarts[0], language: language)]
+                arguments: [AppDateFormatting.dayWithWeekdayString(from: dayStarts[0], language: language)]
             )
         default:
             return L10n.notificationDailyReportCount(dayStarts.count, language: language)

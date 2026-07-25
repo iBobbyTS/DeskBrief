@@ -40,6 +40,8 @@ The app is centered around a small set of long-lived services created at launch 
   Dedicated SwiftUI window showing a scrollable table of past analysis runs and their linked summary runs, with model, success/failure counts, token statistics, timing, and error messages. The view model subscribes to `appDatabaseDidChange` and reloads automatically.
 - `AppLogStore`
   Database-backed runtime log list used by the menu-bar log window and the shared sink for non-fatal runtime failures.
+- `AppDateFormatting` / `AppTimeFormatting`
+  Shared UI presentation boundary for user-selectable date and clock formats. `SettingsStore` owns and persists the selected formats; report timelines request an explicit no-year date style only for month and year axes.
 
 ## High-level flow
 

@@ -39,7 +39,11 @@ struct AppLogsView: View {
                         HStack(alignment: .top, spacing: 12) {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(spacing: 8) {
-                                    Text(L10n.timestampFormatter(language: language).string(from: entry.createdAt))
+                                    Text(AppTimeFormatting.dateTimeString(
+                                        from: entry.createdAt,
+                                        precision: .millisecond,
+                                        language: language
+                                    ))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     Text(entry.level.title(in: language))

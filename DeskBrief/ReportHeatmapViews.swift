@@ -273,15 +273,9 @@ private struct ContinuousHeatmapView: View {
         return CGFloat(item.end.timeIntervalSince(item.start) / totalDuration) * width
     }
 
-    fileprivate static func tickFormatter(for interval: DateInterval) -> DateFormatter {
-        L10n.reportTickFormatter(for: interval)
-    }
-
     private func tickLabel(for tick: Date, isLast: Bool) -> String {
-        if isLast {
-            return L10n.reportFinalTickFormatter().string(from: range.interval.end.addingTimeInterval(-1))
-        }
-        return Self.tickFormatter(for: range.interval).string(from: tick)
+        let displayDate = isLast ? range.interval.end.addingTimeInterval(-1) : tick
+        return AppDateFormatting.string(from: displayDate, style: .monthDay)
     }
 }
 
@@ -444,9 +438,9 @@ private struct DailyHeatmapView: View {
     private func tickLabel(for tick: Date) -> String {
         let hours = Calendar.reportCalendar.dateComponents([.hour], from: range.interval.start, to: tick).hour ?? 0
         if hours == 24 {
-            return "24:00"
+            return AppTimeFormatting.endOfDayString(for: range.interval.end)
         }
-        return L10n.dailyHeatmapTickFormatter().string(from: tick)
+        return AppTimeFormatting.string(from: tick)
     }
 }
 
@@ -488,10 +482,11 @@ private struct WeeklyHeatmapView: View {
                         .frame(height: 1)
                         .offset(y: 20)
 
-                    ForEach(Array(tickDates.enumerated()), id: \.offset) { _, tick in
-                        let xPosition = position(for: tick, in: canvasWidth)
+                    ForEach(Array(tickDates.enumerated()), id: \.offset) { index, tick in
+                        let isLast = index == tickDates.count - 1
+                        let xPosition = isLast ? canvasWidth : position(for: tick, in: canvasWidth)
                         VStack(spacing: 4) {
-                            Text(tickLabel(for: tick))
+                            Text(tickLabel(for: tick, isLast: isLast))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .frame(width: axisLabelWidth, alignment: .center)
@@ -621,13 +616,11 @@ private struct WeeklyHeatmapView: View {
         return position(for: date.timeIntervalSince(dayStart), in: width)
     }
 
-    private func tickLabel(for tick: Date) -> String {
-        let base = Calendar.reportCalendar.startOfDay(for: tick)
-        let hours = Calendar.reportCalendar.dateComponents([.hour], from: base, to: tick).hour ?? 0
-        if hours == 24 {
-            return "24:00"
+    private func tickLabel(for tick: Date, isLast: Bool) -> String {
+        if isLast {
+            return AppTimeFormatting.endOfDayString(for: tick)
         }
-        return L10n.dailyHeatmapTickFormatter().string(from: tick)
+        return AppTimeFormatting.string(from: tick)
     }
 }
 
@@ -712,10 +705,11 @@ private struct OverlayDailyHeatmapView: View {
                         .frame(height: 1)
                         .offset(y: 20)
 
-                    ForEach(Array(tickDates.enumerated()), id: \.offset) { _, tick in
-                        let xPosition = position(for: tick, in: canvasWidth)
+                    ForEach(Array(tickDates.enumerated()), id: \.offset) { index, tick in
+                        let isLast = index == tickDates.count - 1
+                        let xPosition = isLast ? canvasWidth : position(for: tick, in: canvasWidth)
                         VStack(spacing: 4) {
-                            Text(tickLabel(for: tick))
+                            Text(tickLabel(for: tick, isLast: isLast))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .frame(width: axisLabelWidth, alignment: .center)
@@ -837,12 +831,10 @@ private struct OverlayDailyHeatmapView: View {
         return position(for: date.timeIntervalSince(dayStart), in: width)
     }
 
-    private func tickLabel(for tick: Date) -> String {
-        let base = Calendar.reportCalendar.startOfDay(for: tick)
-        let hours = Calendar.reportCalendar.dateComponents([.hour], from: base, to: tick).hour ?? 0
-        if hours == 24 {
-            return "24:00"
+    private func tickLabel(for tick: Date, isLast: Bool) -> String {
+        if isLast {
+            return AppTimeFormatting.endOfDayString(for: tick)
         }
-        return L10n.dailyHeatmapTickFormatter().string(from: tick)
+        return AppTimeFormatting.string(from: tick)
     }
 }

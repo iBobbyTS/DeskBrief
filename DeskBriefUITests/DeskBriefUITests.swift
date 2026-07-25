@@ -140,6 +140,19 @@ final class DeskBriefUITests: XCTestCase {
     }
 
     @MainActor
+    func testDateAndTimeFormatControlsAppearUnderLanguage() throws {
+        let app = launchIsolatedApp(opening: "--deskbrief-open-settings-general")
+
+        XCTAssertTrue(accessibilityElement("settings.root", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(accessibilityElement("settings.tab.general", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(hasAnyElement(["Language", "语言"], in: app))
+        XCTAssertTrue(hasAnyElement(["Date Format", "日期格式"], in: app))
+        XCTAssertTrue(hasAnyElement(["Time Format", "时间格式"], in: app))
+        XCTAssertTrue(accessibilityElement("settings.dateFormatPicker", in: app).exists)
+        XCTAssertTrue(accessibilityElement("settings.timeFormatPicker", in: app).exists)
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTClockMetric()]) {
             let app = makeIsolatedApp()

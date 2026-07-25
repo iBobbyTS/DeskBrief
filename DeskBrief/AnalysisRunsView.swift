@@ -154,7 +154,10 @@ struct AnalysisRunsView: View {
     private func rowContent(for run: AnalysisRunRecord) -> some View {
         let summaryRun = viewModel.summaryRunsByAnalysisID[run.id]
         return HStack(spacing: 0) {
-            cell(L10n.analysisRunTimeFormatter(language: viewModel.language).string(from: run.createdAt), width: columnWidths[0])
+            cell(
+                AppTimeFormatting.dateTimeString(from: run.createdAt, language: viewModel.language),
+                width: columnWidths[0]
+            )
             cell(run.modelName, width: columnWidths[1])
             cell(statusText(run.status), width: columnWidths[2])
             cell("\(run.successCount)/\(run.failureCount)", width: columnWidths[3])

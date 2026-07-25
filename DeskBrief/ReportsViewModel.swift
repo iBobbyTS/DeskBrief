@@ -535,20 +535,44 @@ final class ReportsViewModel: ObservableObject {
             case .day:
                 let end = calendar.date(byAdding: .day, value: 1, to: startDate) ?? startDate
                 interval = DateInterval(start: startDate, end: end)
-                label = L10n.reportDayDisplayText(for: startDate, language: language)
+                label = AppDateFormatting.dayWithWeekdayString(
+                    from: startDate,
+                    format: settingsStore.dateFormat,
+                    language: language
+                )
             case .week:
                 let end = calendar.date(byAdding: .day, value: 7, to: startDate) ?? startDate
                 interval = DateInterval(start: startDate, end: end)
                 let displayEnd = calendar.date(byAdding: .day, value: 6, to: startDate) ?? startDate
-                label = "\(L10n.reportDayFormatter(language: language).string(from: startDate)) - \(L10n.reportDayFormatter(language: language).string(from: displayEnd))"
+                let startText = AppDateFormatting.string(
+                    from: startDate,
+                    format: settingsStore.dateFormat,
+                    language: language
+                )
+                let endText = AppDateFormatting.string(
+                    from: displayEnd,
+                    format: settingsStore.dateFormat,
+                    language: language
+                )
+                label = "\(startText) - \(endText)"
             case .month:
                 let end = calendar.date(byAdding: .month, value: 1, to: startDate) ?? startDate
                 interval = DateInterval(start: startDate, end: end)
-                label = L10n.reportMonthFormatter(language: language).string(from: startDate)
+                label = AppDateFormatting.string(
+                    from: startDate,
+                    style: .yearMonth,
+                    format: settingsStore.dateFormat,
+                    language: language
+                )
             case .year:
                 let end = calendar.date(byAdding: .year, value: 1, to: startDate) ?? startDate
                 interval = DateInterval(start: startDate, end: end)
-                label = L10n.reportYearFormatter(language: language).string(from: startDate)
+                label = AppDateFormatting.string(
+                    from: startDate,
+                    style: .year,
+                    format: settingsStore.dateFormat,
+                    language: language
+                )
             }
 
             let totalHours = Double(durationRecords.reduce(0) { $0 + $1.durationMinutes }) / 60.0

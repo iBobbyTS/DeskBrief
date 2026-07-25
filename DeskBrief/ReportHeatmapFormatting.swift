@@ -29,7 +29,7 @@ enum ReportHeatmapFormatting {
         language: AppLanguage
     ) -> String {
         let dayStart = calendar.startOfDay(for: date)
-        let timeText = L10n.dailyHeatmapTickFormatter(language: language).string(from: date)
+        let timeText = AppTimeFormatting.string(from: date, language: language)
 
         if dayStart == baseDay {
             return timeText
@@ -43,6 +43,6 @@ enum ReportHeatmapFormatting {
             return "\(L10n.string(.reportHeatmapTomorrow, language: language)) \(timeText)"
         }
 
-        return "\(L10n.reportDayFormatter(language: language).string(from: dayStart)) \(timeText)"
+        return "\(AppDateFormatting.string(from: dayStart, language: language)) \(timeText)"
     }
 }
