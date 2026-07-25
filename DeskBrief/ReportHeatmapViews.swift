@@ -8,8 +8,6 @@ struct HeatmapTimelineView: View {
     let items: [HeatmapEvent]
     let categoryColors: [String: Color]
     let overlayDailyHeatmap: Bool
-    let includeWorkdays: Bool
-    let includeWeekends: Bool
     @Binding var hoveredDailyHeatmapEvent: HeatmapEvent?
 
     var body: some View {
@@ -22,17 +20,9 @@ struct HeatmapTimelineView: View {
                 categoryColors: categoryColors,
                 hoveredEvent: $hoveredDailyHeatmapEvent
             )
-        case .week:
-            WeeklyHeatmapView(
-                categories: categories,
-                items: items,
-                categoryColors: categoryColors,
-                includeWorkdays: includeWorkdays,
-                includeWeekends: includeWeekends
-            )
-        case .month, .year:
+        case .week, .month, .year:
             if overlayDailyHeatmap {
-                OverlayDailyHeatmapView(
+                OverlayDailyTimeHeatmapView(
                     categories: categories,
                     items: items,
                     categoryColors: categoryColors
@@ -46,6 +36,12 @@ struct HeatmapTimelineView: View {
                 )
             }
         }
+    }
+}
+
+extension ReportKind {
+    var supportsOverlayDailyTimeHeatmap: Bool {
+        self != .day
     }
 }
 
@@ -449,12 +445,10 @@ private struct DailyHeatmapHoverFrame {
     let rect: CGRect
 }
 
-private struct WeeklyHeatmapView: View {
+private struct OverlayDailyTimeHeatmapView: View {
     let categories: [String]
     let items: [HeatmapEvent]
     let categoryColors: [String: Color]
-    let includeWorkdays: Bool
-    let includeWeekends: Bool
 
     private let labelWidth: CGFloat = 96
     private let rowHeight: CGFloat = 26
@@ -505,7 +499,8 @@ private struct WeeklyHeatmapView: View {
             let rowStride = metrics.rowStride
             let canvasHeight = metrics.rowsHeight
             let rowIndexMap = Dictionary(uniqueKeysWithValues: categories.enumerated().map { ($0.element, $0.offset) })
-            let fragments = weeklyFragments()
+            let fragments = OverlayDailyTimeHeatmap.fragments(from: items)
+            let depthSegments = OverlayDailyTimeHeatmap.depthSegments(for: fragments)
 
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: rowSpacing) {
@@ -525,16 +520,16 @@ private struct WeeklyHeatmapView: View {
                             .offset(y: CGFloat(index) * rowStride)
                     }
 
-                    ForEach(fragments) { fragment in
-                        if let rowIndex = rowIndexMap[fragment.category] {
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill((categoryColors[fragment.category] ?? .accentColor).opacity(fragmentOpacity(for: fragment, among: fragments)))
+                    ForEach(depthSegments) { segment in
+                        if let rowIndex = rowIndexMap[segment.category] {
+                            Rectangle()
+                                .fill((categoryColors[segment.category] ?? .accentColor).opacity(segment.depth))
                                 .frame(
-                                    width: max(position(for: fragment.endSeconds, in: canvasWidth) - position(for: fragment.startSeconds, in: canvasWidth), 1),
+                                    width: max(position(for: segment.endSeconds, in: canvasWidth) - position(for: segment.startSeconds, in: canvasWidth), 1),
                                     height: rowHeight - 4
                                 )
                                 .offset(
-                                    x: position(for: fragment.startSeconds, in: canvasWidth),
+                                    x: position(for: segment.startSeconds, in: canvasWidth),
                                     y: CGFloat(rowIndex) * rowStride + 2
                                 )
                         }
@@ -543,49 +538,6 @@ private struct WeeklyHeatmapView: View {
                 .frame(width: canvasWidth, height: canvasHeight, alignment: .topLeading)
             }
         }
-    }
-
-    private func fragmentOpacity(for fragment: WeeklyHeatmapFragment, among fragments: [WeeklyHeatmapFragment]) -> Double {
-        WeeklyHeatmapOpacity.opacity(
-            for: fragment.opacitySample,
-            among: fragments.map(\.opacitySample)
-        )
-    }
-
-    private func weeklyFragments() -> [WeeklyHeatmapFragment] {
-        guard includeWorkdays || includeWeekends else {
-            return []
-        }
-
-        var fragments: [WeeklyHeatmapFragment] = []
-        let calendar = Calendar.reportCalendar
-
-        for item in items {
-            var segmentStart = item.start
-            while segmentStart < item.end {
-                let dayStart = calendar.startOfDay(for: segmentStart)
-                let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? item.end
-                let segmentEnd = min(item.end, dayEnd)
-                let isWeekend = calendar.isDateInWeekend(segmentStart)
-                let shouldInclude = isWeekend ? includeWeekends : includeWorkdays
-
-                if shouldInclude {
-                    fragments.append(
-                        WeeklyHeatmapFragment(
-                            id: "\(item.id)-\(segmentStart.timeIntervalSince1970)",
-                            category: item.category,
-                            dayStart: dayStart,
-                            startSeconds: segmentStart.timeIntervalSince(dayStart),
-                            endSeconds: segmentEnd.timeIntervalSince(dayStart)
-                        )
-                    )
-                }
-
-                segmentStart = segmentEnd
-            }
-        }
-
-        return fragments
     }
 
     private func timelineTicks(canvasWidth: CGFloat) -> [Date] {
@@ -624,154 +576,28 @@ private struct WeeklyHeatmapView: View {
     }
 }
 
-private struct WeeklyHeatmapFragment: Identifiable {
+struct OverlayDailyTimeFragment: Identifiable, Equatable {
     let id: String
     let category: String
     let dayStart: Date
     let startSeconds: TimeInterval
     let endSeconds: TimeInterval
-
-    var durationSeconds: TimeInterval {
-        max(endSeconds - startSeconds, 0)
-    }
-
-    var opacitySample: WeeklyHeatmapOpacitySample {
-        WeeklyHeatmapOpacitySample(
-            category: category,
-            dayStart: dayStart,
-            durationSeconds: durationSeconds
-        )
-    }
 }
 
-struct WeeklyHeatmapOpacitySample: Hashable {
+struct OverlayDailyTimeDepthSegment: Identifiable, Equatable {
+    let id: String
     let category: String
-    let dayStart: Date
-    let durationSeconds: TimeInterval
+    let startSeconds: TimeInterval
+    let endSeconds: TimeInterval
+    let depth: Double
 }
 
-enum WeeklyHeatmapOpacity {
-    static func opacity(
-        for sample: WeeklyHeatmapOpacitySample,
-        among samples: [WeeklyHeatmapOpacitySample]
-    ) -> Double {
-        let isAbsence = sample.category == AppDefaults.absenceCategoryName
-        let dailyTotals = Dictionary(grouping: samples) { $0.dayStart }
-            .mapValues { daySamples in
-                daySamples
-                    .filter { ($0.category == AppDefaults.absenceCategoryName) == isAbsence }
-                    .reduce(0.0) { total, sample in
-                        total + sample.durationSeconds
-                    }
-            }
-
-        guard let maxTotal = dailyTotals.values.max(), maxTotal > 0 else {
-            return 0.18
-        }
-
-        let normalized = Swift.min(Swift.max((dailyTotals[sample.dayStart] ?? 0) / maxTotal, 0), 1)
-        return 0.18 + 0.70 * normalized
-    }
-}
-
-private struct OverlayDailyHeatmapView: View {
-    let categories: [String]
-    let items: [HeatmapEvent]
-    let categoryColors: [String: Color]
-
-    private let labelWidth: CGFloat = 96
-    private let rowHeight: CGFloat = 26
-    private let rowSpacing: CGFloat = 10
-    private let axisLabelWidth: CGFloat = 44
-    private let horizontalPadding: CGFloat = 16
-
-    var body: some View {
-        HeatmapTimelineContainer(
-            categoryCount: categories.count,
-            labelWidth: labelWidth,
-            rowHeight: rowHeight,
-            rowSpacing: rowSpacing,
-            horizontalPadding: horizontalPadding
-        ) { canvasWidth in
-            let tickDates = timelineTicks(canvasWidth: canvasWidth)
-
-            HStack(alignment: .bottom, spacing: 0) {
-                Color.clear
-                    .frame(width: labelWidth, height: 1)
-
-                ZStack(alignment: .topLeading) {
-                    Rectangle()
-                        .fill(Color.secondary.opacity(0.18))
-                        .frame(height: 1)
-                        .offset(y: 20)
-
-                    ForEach(Array(tickDates.enumerated()), id: \.offset) { index, tick in
-                        let isLast = index == tickDates.count - 1
-                        let xPosition = isLast ? canvasWidth : position(for: tick, in: canvasWidth)
-                        VStack(spacing: 4) {
-                            Text(tickLabel(for: tick, isLast: isLast))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .frame(width: axisLabelWidth, alignment: .center)
-                                .multilineTextAlignment(.center)
-                            Rectangle()
-                                .fill(Color.secondary.opacity(0.25))
-                                .frame(width: 1, height: 8)
-                        }
-                        .frame(width: axisLabelWidth)
-                        .offset(x: xPosition - axisLabelWidth / 2)
-                    }
-                }
-                .frame(width: canvasWidth, height: 30)
-            }
-        } rowContent: { canvasWidth, metrics in
-            let rowStride = metrics.rowStride
-            let canvasHeight = metrics.rowsHeight
-            let rowIndexMap = Dictionary(uniqueKeysWithValues: categories.enumerated().map { ($0.element, $0.offset) })
-            let fragments = overlayFragments()
-            let opacity = fragmentOpacity(for: fragments)
-
-            HStack(alignment: .top, spacing: 0) {
-                VStack(alignment: .leading, spacing: rowSpacing) {
-                    ForEach(categories, id: \.self) { category in
-                        Text(L10n.displayCategoryName(category))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: labelWidth, height: rowHeight, alignment: .leading)
-                    }
-                }
-
-                ZStack(alignment: .topLeading) {
-                    ForEach(Array(categories.enumerated()), id: \.element) { index, _ in
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(index.isMultiple(of: 2) ? Color.gray.opacity(0.08) : Color.clear)
-                            .frame(width: canvasWidth, height: rowHeight)
-                            .offset(y: CGFloat(index) * rowStride)
-                    }
-
-                    ForEach(fragments) { fragment in
-                        if let rowIndex = rowIndexMap[fragment.category] {
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill((categoryColors[fragment.category] ?? .accentColor).opacity(opacity))
-                                .frame(
-                                    width: max(position(for: fragment.endSeconds, in: canvasWidth) - position(for: fragment.startSeconds, in: canvasWidth), 1),
-                                    height: rowHeight - 4
-                                )
-                                .offset(
-                                    x: position(for: fragment.startSeconds, in: canvasWidth),
-                                    y: CGFloat(rowIndex) * rowStride + 2
-                                )
-                        }
-                    }
-                }
-                .frame(width: canvasWidth, height: canvasHeight, alignment: .topLeading)
-            }
-        }
-    }
-
-    private func overlayFragments() -> [WeeklyHeatmapFragment] {
-        var fragments: [WeeklyHeatmapFragment] = []
-        let calendar = Calendar.reportCalendar
+enum OverlayDailyTimeHeatmap {
+    static func fragments(
+        from items: [HeatmapEvent],
+        calendar: Calendar = .reportCalendar
+    ) -> [OverlayDailyTimeFragment] {
+        var fragments: [OverlayDailyTimeFragment] = []
 
         for item in items {
             var segmentStart = item.start
@@ -780,7 +606,7 @@ private struct OverlayDailyHeatmapView: View {
                 let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? item.end
                 let segmentEnd = min(item.end, dayEnd)
                 fragments.append(
-                    WeeklyHeatmapFragment(
+                    OverlayDailyTimeFragment(
                         id: "\(item.id)-\(segmentStart.timeIntervalSince1970)",
                         category: item.category,
                         dayStart: dayStart,
@@ -795,46 +621,103 @@ private struct OverlayDailyHeatmapView: View {
         return fragments
     }
 
-    private func fragmentOpacity(for fragments: [WeeklyHeatmapFragment]) -> Double {
-        let recordedDayCount = Set(fragments.map(\.dayStart)).count
-        guard recordedDayCount > 0 else {
-            return 0
-        }
-        return 1.0 / Double(recordedDayCount)
-    }
+    static func depthSegments(for fragments: [OverlayDailyTimeFragment]) -> [OverlayDailyTimeDepthSegment] {
+        let activityDays = Set(
+            fragments.lazy
+                .filter { $0.category != AppDefaults.absenceCategoryName }
+                .map(\.dayStart)
+        ).count
+        let absenceDays = Set(
+            fragments.lazy
+                .filter { $0.category == AppDefaults.absenceCategoryName }
+                .map(\.dayStart)
+        ).count
 
-    private func timelineTicks(canvasWidth: CGFloat) -> [Date] {
-        let hourStep = adaptiveHourStep(canvasWidth: canvasWidth)
-        let base = Calendar.reportCalendar.startOfDay(for: Date())
-
-        return stride(from: 0, through: 24, by: hourStep).compactMap { hour in
-            Calendar.reportCalendar.date(byAdding: .hour, value: hour, to: base)
-        }
-    }
-
-    private func adaptiveHourStep(canvasWidth: CGFloat) -> Int {
-        let maxLabelCount = max(Int(canvasWidth / axisLabelWidth), 2)
-        for hourStep in [1, 2, 3, 4, 6, 8, 12] {
-            if (24 / hourStep) + 1 <= maxLabelCount {
-                return hourStep
+        let fragmentsByCategory = Dictionary(grouping: fragments, by: \.category)
+        let rawSegments = fragmentsByCategory.keys.sorted().flatMap { category -> [OverlayDailyTimeDepthSegment] in
+            let categoryFragments = fragmentsByCategory[category] ?? []
+            let recordedDayCount = category == AppDefaults.absenceCategoryName ? absenceDays : activityDays
+            guard recordedDayCount > 0 else {
+                return []
             }
+
+            let contribution = 1.0 / Double(recordedDayCount)
+            var occurrenceDeltas: [TimeInterval: Int] = [:]
+            for fragment in categoryFragments {
+                occurrenceDeltas[fragment.startSeconds, default: 0] += 1
+                occurrenceDeltas[fragment.endSeconds, default: 0] -= 1
+            }
+            let boundaries = occurrenceDeltas.keys.sorted()
+            guard boundaries.count >= 2 else {
+                return []
+            }
+
+            var segments: [OverlayDailyTimeDepthSegment] = []
+            var occurrenceCount = 0
+            for index in 0..<(boundaries.count - 1) {
+                let start = boundaries[index]
+                let end = boundaries[index + 1]
+                occurrenceCount += occurrenceDeltas[start, default: 0]
+                guard end > start else {
+                    continue
+                }
+
+                guard occurrenceCount > 0 else {
+                    continue
+                }
+
+                let depth = Double(occurrenceCount) * contribution
+                if let previous = segments.last,
+                   previous.endSeconds == start,
+                   previous.depth == depth {
+                    segments[segments.count - 1] = OverlayDailyTimeDepthSegment(
+                        id: previous.id,
+                        category: category,
+                        startSeconds: previous.startSeconds,
+                        endSeconds: end,
+                        depth: depth
+                    )
+                } else {
+                    segments.append(
+                        OverlayDailyTimeDepthSegment(
+                            id: "\(category)-\(start)",
+                            category: category,
+                            startSeconds: start,
+                            endSeconds: end,
+                            depth: depth
+                        )
+                    )
+                }
+            }
+            return segments
         }
-        return 12
+        return normalizeDepths(rawSegments)
     }
 
-    private func position(for seconds: TimeInterval, in width: CGFloat) -> CGFloat {
-        CGFloat(min(max(seconds / 86_400.0, 0), 1)) * width
-    }
+    private static func normalizeDepths(
+        _ segments: [OverlayDailyTimeDepthSegment]
+    ) -> [OverlayDailyTimeDepthSegment] {
+        let activityMaximum = segments.lazy
+            .filter { $0.category != AppDefaults.absenceCategoryName }
+            .map(\.depth)
+            .max() ?? 0
+        let absenceMaximum = segments.lazy
+            .filter { $0.category == AppDefaults.absenceCategoryName }
+            .map(\.depth)
+            .max() ?? 0
 
-    private func position(for date: Date, in width: CGFloat) -> CGFloat {
-        let dayStart = Calendar.reportCalendar.startOfDay(for: date)
-        return position(for: date.timeIntervalSince(dayStart), in: width)
-    }
-
-    private func tickLabel(for tick: Date, isLast: Bool) -> String {
-        if isLast {
-            return AppTimeFormatting.endOfDayString(for: tick)
+        return segments.map { segment in
+            let maximum = segment.category == AppDefaults.absenceCategoryName
+                ? absenceMaximum
+                : activityMaximum
+            let normalizedDepth = maximum > 0 ? min(segment.depth / maximum, 1) : 0
+            return OverlayDailyTimeDepthSegment(
+                id: segment.id,
+                category: segment.category,
+                startSeconds: segment.startSeconds,
+                endSeconds: segment.endSeconds,
+                depth: normalizedDepth
+            )
         }
-        return AppTimeFormatting.string(from: tick)
     }
 }

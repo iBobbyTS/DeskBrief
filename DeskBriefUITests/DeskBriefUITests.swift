@@ -58,6 +58,22 @@ final class DeskBriefUITests: XCTestCase {
     }
 
     @MainActor
+    func testWeeklyHeatmapExposesSharedOverlayDailyTimeControl() throws {
+        let app = launchIsolatedApp(opening: "--deskbrief-open-reports")
+
+        XCTAssertTrue(accessibilityElement("reports.root", in: app).waitForExistence(timeout: 5))
+        let week = element(matchingLabels: ["Week", "周报"], in: app)
+        let heatmap = element(matchingLabels: ["Heatmap", "热力图"], in: app)
+        XCTAssertTrue(week.waitForExistence(timeout: 5))
+        week.click()
+        XCTAssertTrue(heatmap.waitForExistence(timeout: 5))
+        heatmap.click()
+
+        XCTAssertTrue(hasAnyElement(["Overlay daily time", "叠加每日时间"], in: app))
+        XCTAssertTrue(app.switches.firstMatch.waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testLogsWindowSmoke() throws {
         let app = launchIsolatedApp(opening: "--deskbrief-open-logs")
 
@@ -205,6 +221,10 @@ final class DeskBriefUITests: XCTestCase {
 
     private func button(matchingLabels labels: [String], in app: XCUIApplication) -> XCUIElement {
         app.buttons.matching(labelIn: labels).firstMatch
+    }
+
+    private func element(matchingLabels labels: [String], in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(labelIn: labels).firstMatch
     }
 }
 

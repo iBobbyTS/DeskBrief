@@ -241,7 +241,7 @@ struct ReportsView: View {
                     Spacer(minLength: 0)
 
                     if viewModel.selectedVisualization == .heatmap,
-                       viewModel.selectedKind == .month || viewModel.selectedKind == .year {
+                       viewModel.selectedKind.supportsOverlayDailyTimeHeatmap {
                         Toggle(text(.reportOverlayDailyTime), isOn: $viewModel.overlayDailyHeatmap)
                             .toggleStyle(.switch)
                     }
@@ -301,8 +301,6 @@ struct ReportsView: View {
                             items: viewModel.heatmapItems,
                             categoryColors: categoryColors,
                             overlayDailyHeatmap: viewModel.overlayDailyHeatmap,
-                            includeWorkdays: viewModel.includeWorkdays,
-                            includeWeekends: viewModel.includeWeekends,
                             hoveredDailyHeatmapEvent: $hoveredHeatmapEvent
                         )
                     } else {

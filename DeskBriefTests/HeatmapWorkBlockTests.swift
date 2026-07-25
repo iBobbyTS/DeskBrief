@@ -357,27 +357,70 @@ extension DeskBriefTests {
         #expect(notificationSender.messages.first?.body == "已补充 2 个工作块总结，1 个日报。")
     }
 
-    @Test func weeklyHeatmapOpacityNormalizesNonAbsenceTogetherAndAbsenceSeparately() async throws {
+    @Test func overlayDailyTimeDepthAddsContributionsThenNormalizesActivityAndAbsenceSeparately() async throws {
         let calendar = makeTestCalendar()
         let dayOne = calendar.date(from: DateComponents(year: 2026, month: 4, day: 20))!
         let dayTwo = calendar.date(byAdding: .day, value: 1, to: dayOne)!
-        let samples = [
-            WeeklyHeatmapOpacitySample(category: "专注工作", dayStart: dayOne, durationSeconds: 3_600),
-            WeeklyHeatmapOpacitySample(category: "会议沟通", dayStart: dayOne, durationSeconds: 3_600),
-            WeeklyHeatmapOpacitySample(category: "专注工作", dayStart: dayTwo, durationSeconds: 1_800),
-            WeeklyHeatmapOpacitySample(category: AppDefaults.absenceCategoryName, dayStart: dayOne, durationSeconds: 600),
-            WeeklyHeatmapOpacitySample(category: AppDefaults.absenceCategoryName, dayStart: dayTwo, durationSeconds: 1_200),
+        let dayThree = calendar.date(byAdding: .day, value: 2, to: dayOne)!
+        let fragments = [
+            OverlayDailyTimeFragment(id: "work-1", category: "专注工作", dayStart: dayOne, startSeconds: 0, endSeconds: 100),
+            OverlayDailyTimeFragment(id: "work-duplicate", category: "专注工作", dayStart: dayOne, startSeconds: 50, endSeconds: 100),
+            OverlayDailyTimeFragment(id: "meeting-1", category: "会议沟通", dayStart: dayOne, startSeconds: 0, endSeconds: 150),
+            OverlayDailyTimeFragment(id: "work-2", category: "专注工作", dayStart: dayTwo, startSeconds: 50, endSeconds: 150),
+            OverlayDailyTimeFragment(id: "absence-1", category: AppDefaults.absenceCategoryName, dayStart: dayOne, startSeconds: 25, endSeconds: 75),
+            OverlayDailyTimeFragment(id: "absence-2", category: AppDefaults.absenceCategoryName, dayStart: dayTwo, startSeconds: 25, endSeconds: 75),
+            OverlayDailyTimeFragment(id: "absence-3", category: AppDefaults.absenceCategoryName, dayStart: dayThree, startSeconds: 25, endSeconds: 75),
         ]
 
-        let dayOneWork = try #require(samples.first { $0.category == "专注工作" && $0.dayStart == dayOne })
-        let dayTwoWork = try #require(samples.first { $0.category == "专注工作" && $0.dayStart == dayTwo })
-        let dayOneAbsence = try #require(samples.first { $0.category == AppDefaults.absenceCategoryName && $0.dayStart == dayOne })
-        let dayTwoAbsence = try #require(samples.first { $0.category == AppDefaults.absenceCategoryName && $0.dayStart == dayTwo })
+        let segments = OverlayDailyTimeHeatmap.depthSegments(for: fragments)
+        let work = segments.filter { $0.category == "专注工作" }
+        let meeting = try #require(segments.first { $0.category == "会议沟通" })
+        let absence = try #require(segments.first { $0.category == AppDefaults.absenceCategoryName })
 
-        #expect(abs(WeeklyHeatmapOpacity.opacity(for: dayOneWork, among: samples) - 0.88) < 0.001)
-        #expect(abs(WeeklyHeatmapOpacity.opacity(for: dayTwoWork, among: samples) - 0.355) < 0.001)
-        #expect(abs(WeeklyHeatmapOpacity.opacity(for: dayOneAbsence, among: samples) - 0.53) < 0.001)
-        #expect(abs(WeeklyHeatmapOpacity.opacity(for: dayTwoAbsence, among: samples) - 0.88) < 0.001)
+        #expect(work.count == 3)
+        #expect(work.map(\.startSeconds) == [0, 50, 100])
+        #expect(work.map(\.endSeconds) == [50, 100, 150])
+        #expect(work.allSatisfy { $0.depth <= 1 })
+        #expect(abs(work[0].depth - (1.0 / 3.0)) < 0.001)
+        #expect(work[1].depth == 1)
+        #expect(abs(work[2].depth - (1.0 / 3.0)) < 0.001)
+        #expect(meeting.startSeconds == 0)
+        #expect(meeting.endSeconds == 150)
+        #expect(abs(meeting.depth - (1.0 / 3.0)) < 0.001)
+        #expect(absence.startSeconds == 25)
+        #expect(absence.endSeconds == 75)
+        #expect(abs(absence.depth - 1) < 0.001)
+    }
+
+    @Test func overlayDailyTimeFragmentsSplitCrossDayEventsOnceForEveryReportKind() async throws {
+        let calendar = makeTestCalendar()
+        let dayOne = calendar.date(from: DateComponents(year: 2026, month: 4, day: 20))!
+        let start = calendar.date(byAdding: .minute, value: 23 * 60 + 30, to: dayOne)!
+        let end = calendar.date(byAdding: .minute, value: 60, to: start)!
+        let event = HeatmapEvent(
+            id: "cross-day",
+            category: "专注工作",
+            start: start,
+            end: end,
+            durationMinutes: 60
+        )
+
+        let fragments = OverlayDailyTimeHeatmap.fragments(from: [event], calendar: calendar)
+
+        #expect(fragments.count == 2)
+        #expect(fragments[0].dayStart == dayOne)
+        #expect(fragments[0].startSeconds == 23.5 * 60 * 60)
+        #expect(fragments[0].endSeconds == 24 * 60 * 60)
+        #expect(fragments[1].dayStart == calendar.date(byAdding: .day, value: 1, to: dayOne))
+        #expect(fragments[1].startSeconds == 0)
+        #expect(fragments[1].endSeconds == 30 * 60)
+    }
+
+    @Test func overlayDailyTimeCapabilityIncludesWeekMonthAndYearOnly() async throws {
+        #expect(!ReportKind.day.supportsOverlayDailyTimeHeatmap)
+        #expect(ReportKind.week.supportsOverlayDailyTimeHeatmap)
+        #expect(ReportKind.month.supportsOverlayDailyTimeHeatmap)
+        #expect(ReportKind.year.supportsOverlayDailyTimeHeatmap)
     }
 
     @Test func heatmapLayoutSizesContainerToContentOrAvailableHeight() async throws {
