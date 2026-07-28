@@ -9,11 +9,11 @@
 
 关键落盘位置：
 
-- Release / 生产 bundle id：`com.iBobby.DeskBrief`
+- Release / 生产 bundle id：`com.iBobby.DeskBrief2`
 - Debug / 开发 bundle id：`com.iBobby.DeskBrief.dev`
 - 非 sandbox Release Application Support 目录：`~/Library/Application Support/DeskBrief/`
 - 非 sandbox Release 数据库：`~/Library/Application Support/DeskBrief/desk-brief.sqlite`
-- Sandboxed Release 数据库：`~/Library/Containers/com.iBobby.DeskBrief/Data/Library/Application Support/DeskBrief/desk-brief.sqlite`
+- 旧 Sandboxed Release 数据库：`~/Library/Containers/com.iBobby.DeskBrief2/Data/Library/Application Support/DeskBrief/desk-brief.sqlite`
 - Sandboxed Debug 数据库：`~/Library/Containers/com.iBobby.DeskBrief.dev/Data/Library/Application Support/DeskBrief/desk-brief.sqlite`
 - 正式截屏目录：`~/Library/Application Support/DeskBrief/screenshots/`
 - 预览截屏目录：`~/Library/Application Support/DeskBrief/screenshots/preview/`
@@ -50,6 +50,13 @@
 - 加密状态下，系统 `sqlite3` 只能用于明文备份或测试临时库；直接读加密运行库预期会失败。
 - 明文状态下，可以直接用系统 `sqlite3` 读取运行库。注意这也意味着任何能读到这个文件的 App 都可以读数据。
 - 检查加密运行库时，优先创建 `/private/tmp` 下的临时 Swift/SQLCipher 工具，通过 Keychain 读取 `database-passphrase.main` 后打开数据库。不要把这类一次性检查工具提交到仓库。
+
+容器数据合并：
+
+- 使用 `python3 scripts/merge_container_data.py` 先做只读 dry-run；确认统计后再加 `--apply`。
+- 正式合并前必须退出 DeskBrief。脚本会再次检查进程，并自动把容器外目标目录备份到桌面的时间戳目录。
+- 自增 ID 会安全重映射；业务唯一键冲突保留容器外版本。同名但内容不同的截图会以 `-container-N` 改名保留。
+- 脚本只支持 schema v1 明文 SQLite；任一数据库已启用 SQLCipher 时会拒绝执行。
 
 明文备份或测试库常用命令：
 

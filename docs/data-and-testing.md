@@ -5,7 +5,7 @@
 The app separates the development and release app identities by bundle identifier:
 
 - Debug app builds use `com.iBobby.DeskBrief.dev`.
-- Release app builds use `com.iBobby.DeskBrief`.
+- Release app builds use `com.iBobby.DeskBrief2`.
 
 UserDefaults domains, Keychain services, and sandbox containers are scoped by that bundle identifier. Use Debug builds for local development data and Release builds for production or upgrade-path validation.
 
@@ -13,13 +13,15 @@ The release app stores runtime data under Application Support:
 
 - Database
   `~/Library/Application Support/DeskBrief/desk-brief.sqlite`
-  The SQLite file is plaintext by default. If database encryption is enabled in Settings, the file is converted to SQLCipher and the passphrase is stored in Keychain under service `com.iBobby.DeskBrief` and account `database-passphrase.main`.
+  The SQLite file is plaintext by default. If database encryption is enabled in Settings, the file is converted to SQLCipher and the passphrase is stored in Keychain under service `com.iBobby.DeskBrief2` and account `database-passphrase.main`.
 - Screenshot directory
   `~/Library/Application Support/DeskBrief/screenshots/`
 - Preview screenshots
   `~/Library/Application Support/DeskBrief/screenshots/preview/`
 - Model-test temporary screenshots
   `~/Library/Application Support/DeskBrief/screenshots/temp/`
+
+Release packaging must not enable App Sandbox. This is an explicit product requirement: release builds must keep using the non-container Application Support paths above. Do not add or preserve the `com.apple.security.app-sandbox` entitlement in a release artifact, and do not redirect release data to `~/Library/Containers/<bundle-id>/`.
 
 Sandboxed Debug builds use the development container instead:
 
@@ -31,6 +33,24 @@ Sandboxed Debug builds use the development container instead:
   `com.iBobby.DeskBrief.dev`
 - Development Keychain service
   `com.iBobby.DeskBrief.dev`
+
+Legacy data from the former sandboxed Release build can be inspected and merged
+without changing the live database first:
+
+```sh
+python3 scripts/merge_container_data.py
+```
+
+After reviewing the dry-run counts and quitting DeskBrief, apply the merge with:
+
+```sh
+python3 scripts/merge_container_data.py --apply
+```
+
+The applied command backs up the non-container support directory before
+changing it. It remaps colliding run IDs, keeps destination rows when a natural
+key has different payloads, preserves conflicting screenshots under a
+`-container-N` filename, and rejects encrypted or unexpected database schemas.
 
 ## Database tables
 

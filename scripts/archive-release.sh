@@ -35,10 +35,10 @@ fi
 
 ditto "${ARCHIVED_APP_PATH}" "${APP_PATH}"
 
-if ! codesign -d --entitlements :- "${APP_PATH}" 2>/dev/null \
+if codesign -d --entitlements :- "${APP_PATH}" 2>/dev/null \
   | grep -q "<key>com.apple.security.app-sandbox</key>"; then
-  echo "error: archived app is missing the app sandbox entitlement" >&2
-  echo "hint: keep CODE_SIGNING_ALLOWED=YES or archive from Xcode with signing enabled." >&2
+  echo "error: archived app unexpectedly contains the app sandbox entitlement" >&2
+  echo "hint: DeskBrief Release builds must use the non-container Application Support directory." >&2
   exit 1
 fi
 

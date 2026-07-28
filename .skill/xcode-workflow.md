@@ -66,7 +66,8 @@ scripts/archive-release.sh
 实践要点：
 
 - 默认 DerivedData 路径在当前沙箱里容易触发日志目录权限错误，因此统一把 `-derivedDataPath` 指到 `/tmp`。
-- 需要生成 Release archive 和可直接检查的 `.app` 时，优先用 `scripts/archive-release.sh`。它会生成 `build/DeskBrief.xcarchive`，并从归档中复制出 `build/DeskBrief.app`；默认使用 `/tmp/DeskBriefArchiveDerivedData` 且 `CODE_SIGNING_ALLOWED=YES`，保留 sandbox entitlement。脚本会在归档后校验 `com.apple.security.app-sandbox`，避免未签名产物退回非 sandbox 数据目录。
+- **本项目的 Release 打包明确不得启用 App Sandbox。** Release 应继续从容器外的 `~/Library/Application Support/DeskBrief/` 读取数据库和截图；不要为发布产物添加或保留 `com.apple.security.app-sandbox` entitlement，也不要把回退到非 sandbox 数据目录视为错误。
+- `scripts/archive-release.sh` 是 Release archive 和 `.app` 的产物入口，生成 `build/DeskBrief.xcarchive` 和 `build/DeskBrief.app`。脚本默认保留本机签名，但会拒绝任何仍包含 `com.apple.security.app-sandbox` entitlement 的产物。
 - 在受限沙箱里跑 `xcodebuild test` 可能需要 macOS test runner 权限。常见失败是 `Connection init failed at lookup with error 159 - Sandbox restriction` 或 `attempt to post distributed notification ... thwarted by sandboxing`；如果当前运行环境明确给了 runner 权限，就不要再请求提权。
 - `CoreSimulatorService connection became invalid`、`attempt to post distributed notification ... thwarted by sandboxing` 这类输出在 macOS CLI 环境里常见；只有在最终出现真正的 `SwiftCompile` / `Test Failure` 时才按失败处理。
 - UI 测试默认不是首选排障入口。先跑 `DeskBriefTests`，只有明确要验证窗口流程或系统权限交互时再考虑 `DeskBriefUITests`。
