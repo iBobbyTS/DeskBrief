@@ -16,6 +16,12 @@ struct MenuBarApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandGroup(after: .appSettings) {
+                Button(L10n.string(.menuReports, language: .current)) {
+                    appDelegate.openReports()
+                }
+                .keyboardShortcut("r", modifiers: .command)
+            }
         }
     }
 }
@@ -757,7 +763,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         activateAndShow(window)
     }
 
-    @objc private func openReports() {
+    @objc func openReports() {
         guard let reportsViewModel else { return }
         reportsViewModel.reload()
 

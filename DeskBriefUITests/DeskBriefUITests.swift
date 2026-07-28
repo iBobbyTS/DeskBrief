@@ -45,6 +45,18 @@ final class DeskBriefUITests: XCTestCase {
     }
 
     @MainActor
+    func testCommandROpensReportsWindow() throws {
+        let app = launchIsolatedApp(opening: "--deskbrief-open-settings")
+
+        XCTAssertTrue(accessibilityElement("settings.root", in: app).waitForExistence(timeout: 5))
+
+        app.typeKey("r", modifierFlags: .command)
+
+        XCTAssertTrue(accessibilityElement("reports.root", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(hasAnyElement(["Report type", "报告类型"], in: app))
+    }
+
+    @MainActor
     func testModelCopyButtonShowsConfirmation() throws {
         let app = launchIsolatedApp(opening: "--deskbrief-open-settings")
 
