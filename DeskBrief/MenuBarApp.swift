@@ -9,6 +9,14 @@ struct MenuBarApp: App {
         Settings {
             EmptyView()
         }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button(L10n.string(.menuSettings, language: .current)) {
+                    appDelegate.openSettings()
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+        }
     }
 }
 
@@ -715,7 +723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
 
-    @objc private func openSettings() {
+    @objc func openSettings() {
         openSettingsWindow(initialTab: .screenshotAnalysis)
     }
 
