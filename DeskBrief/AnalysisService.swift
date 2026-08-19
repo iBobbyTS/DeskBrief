@@ -182,7 +182,12 @@ final class AnalysisService {
                 for: snapshot.screenshotAnalysisModelProfile,
                 lifecycle: lmStudioLifecycleForTest
             )
-            let result = try await analysisWorker.analyzeImageDetailed(at: imageFileURL, settings: snapshot, prompt: prompt)
+            let result = try await analysisWorker.analyzeImageDetailed(
+                at: imageFileURL,
+                settings: snapshot,
+                prompt: prompt,
+                lmStudioInstanceID: loadedModel?.instanceID
+            )
 
             if let loadedModel {
                 await unloadModelAfterSettingsTest(
@@ -307,9 +312,14 @@ final class AnalysisService {
             notificationIntent = .analysisCompletion(notificationContext)
         }
 
-        let lmStudioPolicy: DailyReportLMStudioLifecyclePolicy = (summaryLifecycleEnabled && !canReuseAnalysisModel)
-            ? .loadForSummaryThenUnload
-            : .reuseAlreadyLoadedModelAndKeepLoaded
+        let lmStudioPolicy: DailyReportLMStudioLifecyclePolicy
+        if canReuseAnalysisModel, let instanceID = result.lmStudioInstanceID {
+            lmStudioPolicy = .reuseLoadedInstanceAndKeepLoaded(instanceID: instanceID)
+        } else if summaryLifecycleEnabled {
+            lmStudioPolicy = .loadForSummaryThenUnload
+        } else {
+            lmStudioPolicy = .unmanaged
+        }
 
         dailyReportSummaryService.enqueueSummariesAfterAnalysis(
             workBlockDayStarts: result.affectedDayStarts,

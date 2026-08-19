@@ -460,6 +460,7 @@ func lmStudioLifecycleTestResponse(for request: URLRequest) throws -> (HTTPURLRe
     let body = try requestBody.flatMap {
         try JSONSerialization.jsonObject(with: $0) as? [String: Any]
     } ?? [:]
+    MockURLProtocol.requestJSONBodies.append(body)
 
     switch path {
     case "/api/v1/models/load":
@@ -515,6 +516,7 @@ func lmStudioLifecycleTestResponse(for request: URLRequest) throws -> (HTTPURLRe
             """
         )
     case "/api/v1/chat":
+        #expect(body["context_length"] as? Int != nil)
         if body["input"] is String {
             return try makeHTTPResponse(
                 url: try #require(request.url),
@@ -547,22 +549,25 @@ func lmStudioLifecycleTestResponse(for request: URLRequest) throws -> (HTTPURLRe
             """
         )
     case "/v1/chat/completions":
-        let model = try #require(body["model"] as? String)
-        let responseText = model == "summary-model"
-            ? #"{\"dailySummary\":\"完成了前一天日报总结\",\"categorySummaries\":{\"专注工作\":\"总结了前一天专注工作\"}}"#
-            : #"{\"category\":\"专注工作\",\"summary\":\"完成截屏分析\"}"#
+        let messages = body["messages"] as? [[String: Any]]
+        let prompt = messages?.first?["content"] as? String ?? ""
+        let isSummary = (prompt.contains("dailySummary") || prompt.contains("日报"))
+            && ((body["model"] as? String)?.contains("summary") == true || prompt.contains("dailySummary"))
+        let responseText = isSummary
+            ? #"{"dailySummary":"完成了前一天日报总结","categorySummaries":{"专注工作":"总结了前一天专注工作"}}"#
+            : #"{"category":"专注工作","summary":"完成截屏分析"}"#
         return try makeHTTPResponse(
             url: try #require(request.url),
             body: """
             {
+              "model": "\(body["model"] as? String ?? "instance")",
               "choices": [
                 {
-                  "message": {
-                    "content": "\(responseText)"
-                  },
+                  "message": {"role": "assistant", "content": "\(responseText.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))"},
                   "finish_reason": "stop"
                 }
-              ]
+              ],
+              "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
             }
             """
         )
@@ -618,12 +623,14 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     static var requestCount = 0
     static var lastRequestedModel: String?
     static var requestPaths: [String] = []
+    static var requestJSONBodies: [[String: Any]] = []
 
     static func reset() {
         requestHandler = nil
         requestCount = 0
         lastRequestedModel = nil
         requestPaths = []
+        requestJSONBodies = []
     }
 
     override class func canInit(with request: URLRequest) -> Bool {

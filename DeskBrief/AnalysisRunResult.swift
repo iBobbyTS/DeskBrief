@@ -14,4 +14,5 @@ struct AnalysisRunResult {
     let affectedDayStarts: Set<Date>
     let dailyReportCandidateDayStarts: Set<Date>
     let wasCancelled: Bool
+    var lmStudioInstanceID: String? = nil
 }

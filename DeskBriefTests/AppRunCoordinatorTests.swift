@@ -88,7 +88,7 @@ extension DeskBriefTests {
         var request = DailyReportSummaryRequest.summariesAfterAnalysisRun(
             workBlockDayStarts: [firstWorkBlockDay],
             dailyReportCandidateDayStarts: [firstDailyReportDay],
-            lmStudioLifecyclePolicy: .reuseAlreadyLoadedModelAndKeepLoaded,
+            lmStudioLifecyclePolicy: .reuseLoadedInstanceAndKeepLoaded(instanceID: "analysis-model-instance"),
             waiter: nil
         )
         request.merge(

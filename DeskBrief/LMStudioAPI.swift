@@ -318,7 +318,7 @@ enum LMStudioAPI {
     }
 
     static func buildChatRequestBody(
-        modelName: String,
+        modelIdentifier: String,
         prompt: String,
         imageData: Data?,
         contextLength: Int,
@@ -342,12 +342,61 @@ enum LMStudioAPI {
         }
 
         let body: [String: Any] = [
-            "model": modelName,
+            "model": modelIdentifier,
             "input": input,
             "store": false,
             "context_length": contextLength,
         ]
         return try JSONSerialization.data(withJSONObject: body)
+    }
+
+    static func instanceBoundChatURL(from baseURLString: String) -> URL? {
+        guard let nativeChatURL = ModelProvider.lmStudio.requestURL(from: baseURLString),
+              var components = URLComponents(url: nativeChatURL, resolvingAgainstBaseURL: false),
+              components.path.hasSuffix("/api/v1/chat") else {
+            return nil
+        }
+
+        components.path = String(components.path.dropLast("/api/v1/chat".count)) + "/v1/chat/completions"
+        return components.url
+    }
+
+    static func buildInstanceBoundChatRequestBody(
+        modelIdentifier: String,
+        prompt: String,
+        imageData: Data?,
+        contextLength: Int,
+        maximumResponseTokens: Int
+    ) throws -> Data {
+        let content: Any
+        if let imageData {
+            let imageBase64 = imageData.base64EncodedString()
+            content = [
+                [
+                    "type": "text",
+                    "text": prompt,
+                ],
+                [
+                    "type": "image_url",
+                    "image_url": [
+                        "url": "data:image/jpeg;base64,\(imageBase64)",
+                    ],
+                ],
+            ]
+        } else {
+            content = prompt
+        }
+
+        return try JSONSerialization.data(withJSONObject: [
+            "model": modelIdentifier,
+            "messages": [[
+                "role": "user",
+                "content": content,
+            ]],
+            "max_tokens": maximumResponseTokens,
+            "context_length": contextLength,
+            "stream": false,
+        ])
     }
 
     static func fallbackMultimodalTextInputStyle(

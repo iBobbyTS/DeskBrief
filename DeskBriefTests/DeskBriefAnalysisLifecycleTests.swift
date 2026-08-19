@@ -2140,7 +2140,36 @@ extension DeskBriefTests {
             summaryMatchesAnalysis: true
         )
 
-        #expect(paths == ["/api/v1/models/load", "/api/v1/chat", "/api/v1/chat"])
+        #expect(paths == ["/api/v1/models/load", "/v1/chat/completions", "/v1/chat/completions"])
+    }
+
+    @MainActor
+    @Test func lmStudioFormalMultiScreenshotRunUsesOneLoadedInstanceForEveryChat() async throws {
+        let paths = try await runAnalysisLifecycleScenario(
+            analysisProvider: .lmStudio,
+            summaryProvider: .lmStudio,
+            summaryMatchesAnalysis: true,
+            screenshotCount: 2
+        )
+
+        #expect(paths == ["/api/v1/models/load", "/v1/chat/completions", "/v1/chat/completions", "/v1/chat/completions", "/v1/chat/completions"])
+    }
+
+    @MainActor
+    @Test func lmStudioAnalysisTransportRetryKeepsLoadedInstanceID() async throws {
+        let paths = try await runAnalysisLifecycleScenario(
+            analysisProvider: .lmStudio,
+            summaryProvider: .openAI,
+            analysisFailuresBeforeSuccess: 1
+        )
+
+        #expect(paths == [
+            "/api/v1/models/load",
+            "/v1/chat/completions",
+            "/v1/chat/completions",
+            "/api/v1/models/unload",
+            "/v1/chat/completions",
+        ])
     }
 
     @MainActor
@@ -2157,6 +2186,19 @@ extension DeskBriefTests {
     }
 
     @MainActor
+    @Test func lmStudioRetainedAnalysisInstanceWinsWhenSummaryLifecycleIsDisabled() async throws {
+        let paths = try await runAnalysisLifecycleScenario(
+            analysisProvider: .lmStudio,
+            summaryProvider: .lmStudio,
+            summaryMatchesAnalysis: true,
+            analysisLifecycleEnabled: true,
+            summaryLifecycleEnabled: false
+        )
+
+        #expect(paths == ["/api/v1/models/load", "/v1/chat/completions", "/v1/chat/completions"])
+    }
+
+    @MainActor
     @Test func lmStudioAnalysisAndDifferentLMStudioSummarySwitchesModels() async throws {
         let paths = try await runAnalysisLifecycleScenario(
             analysisProvider: .lmStudio,
@@ -2164,7 +2206,7 @@ extension DeskBriefTests {
             summaryMatchesAnalysis: false
         )
 
-        #expect(paths == ["/api/v1/models/load", "/api/v1/chat", "/api/v1/models/unload", "/api/v1/models/load", "/api/v1/chat", "/api/v1/models/unload"])
+        #expect(paths == ["/api/v1/models/load", "/v1/chat/completions", "/api/v1/models/unload", "/api/v1/models/load", "/v1/chat/completions", "/api/v1/models/unload"])
     }
 
     @MainActor
@@ -2174,7 +2216,7 @@ extension DeskBriefTests {
             summaryProvider: .openAI
         )
 
-        #expect(paths == ["/api/v1/models/load", "/api/v1/chat", "/api/v1/models/unload", "/v1/chat/completions"])
+        #expect(paths == ["/api/v1/models/load", "/v1/chat/completions", "/api/v1/models/unload", "/v1/chat/completions"])
     }
 
     @MainActor
@@ -2184,7 +2226,7 @@ extension DeskBriefTests {
             summaryProvider: .lmStudio
         )
 
-        #expect(paths == ["/v1/chat/completions", "/api/v1/models/load", "/api/v1/chat", "/api/v1/models/unload"])
+        #expect(paths == ["/v1/chat/completions", "/api/v1/models/load", "/v1/chat/completions", "/api/v1/models/unload"])
     }
 
     @MainActor
@@ -2219,7 +2261,7 @@ extension DeskBriefTests {
         defer { try? FileManager.default.removeItem(at: screenshotURL) }
 
         let session = makeMockSession { request in
-            try lmStudioLifecycleTestResponse(for: request)
+            return try lmStudioLifecycleTestResponse(for: request)
         }
         let logStore = AppLogStore(database: database)
         let summaryService = DailyReportSummaryService(
@@ -2238,7 +2280,14 @@ extension DeskBriefTests {
 
         _ = try await service.testCurrentSettings(with: screenshotURL)
 
-        #expect(MockURLProtocol.requestPaths == ["/api/v1/models/load", "/api/v1/chat", "/api/v1/models/unload"])
+        #expect(MockURLProtocol.requestPaths == ["/api/v1/models/load", "/v1/chat/completions", "/api/v1/models/unload"])
+        #expect(MockURLProtocol.requestJSONBodies.compactMap { $0["model"] as? String } == [
+            "analysis-model",
+            "analysis-model-instance",
+        ])
+        #expect(MockURLProtocol.requestJSONBodies.compactMap { $0["instance_id"] as? String } == [
+            "analysis-model-instance",
+        ])
     }
 
     @MainActor
@@ -2287,7 +2336,7 @@ extension DeskBriefTests {
     @Test func lmStudioSummaryCancelUnloadsWhenLifecycleEnabled() async throws {
         let paths = try await runSummaryCancellationLifecycleScenario(lifecycleEnabled: true)
 
-        #expect(paths == ["/api/v1/models/load", "/api/v1/chat", "/api/v1/models/unload"])
+        #expect(paths == ["/api/v1/models/load", "/v1/chat/completions", "/api/v1/models/unload"])
     }
 
     @MainActor
@@ -2295,6 +2344,16 @@ extension DeskBriefTests {
         let paths = try await runSummaryCancellationLifecycleScenario(lifecycleEnabled: false)
 
         #expect(paths == ["/api/v1/chat"])
+    }
+
+    @MainActor
+    @Test func lmStudioRetainedSummaryCancellationUsesExactOwnedInstanceID() async throws {
+        let paths = try await runSummaryCancellationLifecycleScenario(
+            lifecycleEnabled: false,
+            policy: .reuseLoadedInstanceAndKeepLoaded(instanceID: "analysis-model-instance")
+        )
+
+        #expect(paths == ["/v1/chat/completions", "/api/v1/models/unload"])
     }
 
     @MainActor
@@ -2480,7 +2539,7 @@ extension DeskBriefTests {
         try writeTestScreenshotPlaceholder(to: screenshotURL)
 
         let session = makeMockSession { request in
-            try lmStudioLifecycleTestResponse(for: request)
+            return try lmStudioLifecycleTestResponse(for: request)
         }
         let logStore = AppLogStore(database: database)
         let summaryService = DailyReportSummaryService(
@@ -2504,7 +2563,7 @@ extension DeskBriefTests {
         let logs = try database.fetchAppLogs()
 
         #expect(didFinish)
-        #expect(MockURLProtocol.requestPaths == ["/api/v1/models/load", "/api/v1/chat", "/api/v1/models/unload"])
+        #expect(MockURLProtocol.requestPaths == ["/api/v1/models/load", "/v1/chat/completions", "/api/v1/models/unload"])
         #expect(logs.contains { $0.message.contains("analysis-model-instance") })
     }
 
@@ -2818,7 +2877,10 @@ extension DeskBriefTests {
         #expect(store.pendingCount(defaultDurationMinutes: 5) == 2)
     }
 
-    private func runSummaryCancellationLifecycleScenario(lifecycleEnabled: Bool) async throws -> [String] {
+    private func runSummaryCancellationLifecycleScenario(
+        lifecycleEnabled: Bool,
+        policy: DailyReportLMStudioLifecyclePolicy = .loadForSummaryThenUnload
+    ) async throws -> [String] {
         let databaseURL = makeTemporaryDatabaseURL()
         let supportURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -2862,10 +2924,36 @@ extension DeskBriefTests {
             durationMinutesSnapshot: 30
         )
 
+        let expectedReusedInstanceID: String?
+        if case .reuseLoadedInstanceAndKeepLoaded(let instanceID) = policy {
+            expectedReusedInstanceID = instanceID
+        } else {
+            expectedReusedInstanceID = nil
+        }
         let session = makeMockSession { request in
-            if request.url?.path == "/api/v1/chat" {
+            if request.url?.path == "/v1/chat/completions" || request.url?.path == "/api/v1/chat" {
+                if let expectedReusedInstanceID {
+                    let data = try #require(requestBodyData(from: request))
+                    let body = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+                    #expect(body["model"] as? String == expectedReusedInstanceID)
+                }
                 summaryRequestStarted.signal()
                 _ = releaseSummaryRequest.wait(timeout: .now() + 5)
+                if expectedReusedInstanceID != nil {
+                    return try makeHTTPResponse(
+                        url: try #require(request.url),
+                        body: #"{"choices":[{"message":{"content":"{\"dailySummary\":\"取消前总结\",\"categorySummaries\":{\"专注工作\":\"取消前总结\"}}"},"finish_reason":"stop"}]}"#
+                    )
+                }
+            }
+            if request.url?.path == "/api/v1/models/unload", let expectedReusedInstanceID {
+                let data = try #require(requestBodyData(from: request))
+                let body = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+                #expect(body["instance_id"] as? String == expectedReusedInstanceID)
+                return try makeHTTPResponse(
+                    url: try #require(request.url),
+                    body: #"{"instance_id":"analysis-model-instance"}"#
+                )
             }
             return try lmStudioLifecycleTestResponse(for: request)
         }
@@ -2880,7 +2968,7 @@ extension DeskBriefTests {
             await service.summarizeAfterAnalysis(
                 workBlockDayStarts: [],
                 dailyReportCandidateDayStarts: [dayOne],
-                lmStudioLifecyclePolicy: .loadForSummaryThenUnload
+                lmStudioLifecyclePolicy: policy
             )
         }
         #expect(await waitForSemaphore(summaryRequestStarted, timeoutSeconds: 5))
@@ -2904,7 +2992,9 @@ extension DeskBriefTests {
         summaryProvider: ModelProvider,
         summaryMatchesAnalysis: Bool = false,
         analysisLifecycleEnabled: Bool = true,
-        summaryLifecycleEnabled: Bool = true
+        summaryLifecycleEnabled: Bool = true,
+        screenshotCount: Int = 1,
+        analysisFailuresBeforeSuccess: Int = 0
     ) async throws -> [String] {
         let databaseURL = makeTemporaryDatabaseURL()
         let supportURL = FileManager.default.temporaryDirectory
@@ -2952,11 +3042,31 @@ extension DeskBriefTests {
         )
 
         let screenshotsDirectory = try database.screenshotsDirectory()
-        let screenshotURL = screenshotsDirectory.appendingPathComponent("20260312-1000-i5.jpg")
-        try writeTestScreenshotPlaceholder(to: screenshotURL)
+        for index in 0..<screenshotCount {
+            let screenshotURL = screenshotsDirectory.appendingPathComponent("20260312-10\(String(format: "%02d", index * 5))-i5.jpg")
+            try writeTestScreenshotPlaceholder(to: screenshotURL)
+        }
 
+        let analysisAttemptCounter = LockedIntCounter()
         let session = makeMockSession { request in
-            try lmStudioLifecycleTestResponse(for: request)
+            if analysisFailuresBeforeSuccess > 0,
+               request.url?.path == "/v1/chat/completions",
+               let data = requestBodyData(from: request),
+               let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               body["messages"] is [[String: Any]] {
+                MockURLProtocol.requestJSONBodies.append(body)
+                if analysisAttemptCounter.increment() <= analysisFailuresBeforeSuccess {
+                    return try makeHTTPResponse(
+                        url: try #require(request.url),
+                        body: #"{"choices":[]}"#
+                    )
+                }
+                return try makeHTTPResponse(
+                    url: try #require(request.url),
+                    body: #"{"model":"analysis-model-instance","choices":[{"message":{"content":"{\"category\":\"专注工作\",\"summary\":\"完成截屏分析\"}"},"finish_reason":"stop"}]}"#
+                )
+            }
+            return try lmStudioLifecycleTestResponse(for: request)
         }
         let logStore = AppLogStore(database: database)
         let summaryService = DailyReportSummaryService(
@@ -2980,6 +3090,32 @@ extension DeskBriefTests {
 
         #expect(didFinish)
         #expect(try database.fetchDailyReport(for: dayOne) != nil)
+        for (path, body) in zip(MockURLProtocol.requestPaths, MockURLProtocol.requestJSONBodies) where path == "/v1/chat/completions" {
+            let messageContent = (body["messages"] as? [[String: Any]])?.first?["content"]
+            if messageContent is [[String: Any]], analysisProvider == .lmStudio {
+                let expectedModel = analysisLifecycleEnabled ? "analysis-model-instance" : "analysis-model"
+                #expect(body["model"] as? String == expectedModel)
+            } else if messageContent is String, summaryProvider == .lmStudio {
+                let expectedModel: String
+                if analysisProvider == .lmStudio, analysisLifecycleEnabled, summaryMatchesAnalysis {
+                    expectedModel = "analysis-model-instance"
+                } else if summaryLifecycleEnabled {
+                    expectedModel = "summary-model-instance"
+                } else {
+                    expectedModel = summaryMatchesAnalysis ? "analysis-model" : "summary-model"
+                }
+                #expect(body["model"] as? String == expectedModel)
+            }
+        }
+        let unloadIDs = zip(MockURLProtocol.requestPaths, MockURLProtocol.requestJSONBodies)
+            .filter { $0.0 == "/api/v1/models/unload" }
+            .compactMap { $0.1["instance_id"] as? String }
+        if analysisProvider == .lmStudio, analysisLifecycleEnabled, !summaryMatchesAnalysis {
+            #expect(unloadIDs.first == "analysis-model-instance")
+        }
+        if summaryProvider == .lmStudio, summaryLifecycleEnabled, !summaryMatchesAnalysis {
+            #expect(unloadIDs.last == "summary-model-instance")
+        }
         return MockURLProtocol.requestPaths
     }
 

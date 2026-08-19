@@ -75,10 +75,12 @@ enum DailyReportSummaryServiceError: LocalizedError, Equatable {
 }
 
 enum DailyReportLMStudioLifecyclePolicy: Equatable {
+    // The summary run does not own an explicitly loaded model.
+    case unmanaged
     // The summary run owns LM Studio load/unload around its work.
     case loadForSummaryThenUnload
     // The analysis run already loaded an equivalent model; summary should reuse it and leave it loaded.
-    case reuseAlreadyLoadedModelAndKeepLoaded
+    case reuseLoadedInstanceAndKeepLoaded(instanceID: String)
 }
 
 private actor AsyncLock {
@@ -578,7 +580,7 @@ final class DailyReportSummaryService {
             let result = try await withLMStudioLifecycleIfNeeded(
                 settings: snapshot.workContentSummaryModelProfile,
                 policy: request.lmStudioLifecyclePolicy
-            ) {
+            ) { lmStudioInstanceID in
                 var result = DailyReportSummaryExecutionResult()
                 var completedCount = 0
 
@@ -587,7 +589,8 @@ final class DailyReportSummaryService {
                     snapshot: snapshot,
                     targetDayStarts: preparation.targetDayStarts,
                     completedCountOffset: completedCount,
-                    totalCount: totalCount
+                    totalCount: totalCount,
+                    lmStudioInstanceID: lmStudioInstanceID
                 )
                 completedCount += workBlockResult.completedCount
                 result.workBlockSummariesCreatedCount += workBlockResult.createdCount
@@ -597,7 +600,8 @@ final class DailyReportSummaryService {
                     pendingDays: preparation.pendingDays,
                     snapshot: snapshot,
                     completedCountOffset: completedCount,
-                    totalCount: totalCount
+                    totalCount: totalCount,
+                    lmStudioInstanceID: lmStudioInstanceID
                 )
                 completedCount += dailyReportResult.completedCount
                 result.dailyReportFailureCount += dailyReportResult.failureCount
@@ -616,7 +620,8 @@ final class DailyReportSummaryService {
                         let record = try await summarizeDayContentLocked(
                             dayStart,
                             snapshot: snapshot,
-                            isTemporary: isTemporary
+                            isTemporary: isTemporary,
+                            lmStudioInstanceID: lmStudioInstanceID
                         )
                         result.dailyReports[dayStart] = record
                     } catch is CancellationError {
@@ -752,7 +757,8 @@ final class DailyReportSummaryService {
         pendingDays: [Date],
         snapshot: AppSettingsSnapshot,
         completedCountOffset: Int,
-        totalCount: Int
+        totalCount: Int,
+        lmStudioInstanceID: String?
     ) async throws -> DailyReportSummaryWorkResult {
         guard !pendingDays.isEmpty else {
             return DailyReportSummaryWorkResult()
@@ -764,7 +770,8 @@ final class DailyReportSummaryService {
                 let record = try await summarizeDayContentLocked(
                     dayStart,
                     snapshot: snapshot,
-                    isTemporary: false
+                    isTemporary: false,
+                    lmStudioInstanceID: lmStudioInstanceID
                 )
                 result.dailyReports[dayStart] = record
             } catch is CancellationError {
@@ -789,7 +796,8 @@ final class DailyReportSummaryService {
         snapshot: AppSettingsSnapshot,
         targetDayStarts: Set<Date>?,
         completedCountOffset: Int,
-        totalCount: Int
+        totalCount: Int,
+        lmStudioInstanceID: String?
     ) async throws -> WorkBlockSummaryWorkResult {
         guard !blocks.isEmpty else {
             return WorkBlockSummaryWorkResult()
@@ -871,7 +879,8 @@ final class DailyReportSummaryService {
                         let summaryText = try await summarizeWorkBlockContentLocked(
                             block: block,
                             sourceSummaries: sourceSummaries,
-                            snapshot: snapshot
+                            snapshot: snapshot,
+                            lmStudioInstanceID: lmStudioInstanceID
                         )
                         try database.upsertDailyWorkBlockSummary(
                             categoryName: block.categoryName,
@@ -921,7 +930,8 @@ final class DailyReportSummaryService {
     private func summarizeWorkBlockContentLocked(
         block: DailyWorkBlock,
         sourceSummaries: [String],
-        snapshot: AppSettingsSnapshot
+        snapshot: AppSettingsSnapshot,
+        lmStudioInstanceID: String?
     ) async throws -> String {
         let language = snapshot.appLanguage
         let settings = snapshot.workContentSummaryModelProfile
@@ -946,7 +956,12 @@ final class DailyReportSummaryService {
             summaryInstruction: snapshot.summaryInstruction,
             language: language
         )
-        let payload = try await requestSummary(prompt: prompt, settings: settings, language: language)
+        let payload = try await requestSummary(
+            prompt: prompt,
+            settings: settings,
+            language: language,
+            lmStudioInstanceID: lmStudioInstanceID
+        )
 
         guard let summary = Self.extractDailyWorkBlockResponse(from: payload) else {
             throw DailyReportSummaryServiceError.invalidResponse(
@@ -1016,7 +1031,8 @@ final class DailyReportSummaryService {
     private func summarizeDayContentLocked(
         _ dayStart: Date,
         snapshot: AppSettingsSnapshot,
-        isTemporary: Bool
+        isTemporary: Bool,
+        lmStudioInstanceID: String?
     ) async throws -> DailyReportRecord {
         let language = snapshot.appLanguage
         let settings = snapshot.workContentSummaryModelProfile
@@ -1056,7 +1072,12 @@ final class DailyReportSummaryService {
             summaryInstruction: snapshot.summaryInstruction,
             language: language
         )
-        let payload = try await requestSummary(prompt: prompt, settings: settings, language: language)
+        let payload = try await requestSummary(
+            prompt: prompt,
+            settings: settings,
+            language: language,
+            lmStudioInstanceID: lmStudioInstanceID
+        )
 
         guard let parsed = Self.extractDailyReportResponse(
             from: payload,
@@ -1086,28 +1107,40 @@ final class DailyReportSummaryService {
     private func withLMStudioLifecycleIfNeeded<T>(
         settings: ModelProfileSettings,
         policy: DailyReportLMStudioLifecyclePolicy,
-        operation: () async throws -> T
+        operation: (String?) async throws -> T
     ) async throws -> T {
-        guard settings.provider == .lmStudio,
-              settings.explicitLoadUnloadModel else {
-            return try await operation()
+        guard settings.provider == .lmStudio else {
+            return try await operation(nil)
         }
 
         switch policy {
-        case .reuseAlreadyLoadedModelAndKeepLoaded:
+        case .unmanaged:
+            return try await operation(nil)
+        case .reuseLoadedInstanceAndKeepLoaded(let instanceID):
             do {
-                return try await operation()
+                let result = try await operation(instanceID)
+                if runtimeState.isStopping {
+                    await unloadLMStudioSummaryModel(
+                        settings: settings,
+                        instanceID: instanceID,
+                        context: "Failed to unload reused LM Studio summary model after summary cancellation"
+                    )
+                }
+                return result
             } catch {
                 if runtimeState.isStopping {
                     await unloadLMStudioSummaryModel(
                         settings: settings,
-                        instanceID: nil,
+                        instanceID: instanceID,
                         context: "Failed to unload reused LM Studio summary model after summary cancellation"
                     )
                 }
                 throw error
             }
         case .loadForSummaryThenUnload:
+            guard settings.explicitLoadUnloadModel else {
+                return try await operation(nil)
+            }
             if Task.isCancelled {
                 throw CancellationError()
             }
@@ -1141,7 +1174,7 @@ final class DailyReportSummaryService {
             }
 
             do {
-                let result = try await operation()
+                let result = try await operation(loadedModel.instanceID)
                 await unloadLMStudioSummaryModel(
                     settings: settings,
                     instanceID: loadedModel.instanceID,
@@ -1295,7 +1328,8 @@ final class DailyReportSummaryService {
     private func requestSummary(
         prompt: String,
         settings: ModelProfileSettings,
-        language: AppLanguage
+        language: AppLanguage,
+        lmStudioInstanceID: String?
     ) async throws -> String {
         do {
             let response = try await llmService.send(
@@ -1307,6 +1341,7 @@ final class DailyReportSummaryService {
                     maximumResponseTokens: 900,
                     timeoutInterval: 120,
                     keychainAccount: AppDefaults.workContentSummaryAPIKeyAccount,
+                    lmStudioInstanceID: lmStudioInstanceID,
                     // Apple Intelligence text summarization uses the general model use case.
                     appleUseCase: .general,
                     appleSchema: nil

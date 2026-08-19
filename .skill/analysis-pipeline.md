@@ -83,7 +83,7 @@
 - 日报汇总读取当天 `captured_at` 结果时，会额外读取当天开始前最后一条结果；如果这条结果按 `duration_minutes_snapshot` 跨入当天，会裁剪成从当天 00:00 开始的活动项。当天内跨到次日的结果也裁剪到当天结束。日报汇总不需要读取次日第一条结果，因为截屏结果自身已经保存了持续时长。
 - 临时日报状态存储在 `daily_reports.is_temporary`。新写入的日报文本和分类总结不要加状态前缀。
 - 工作内容总结始终走文本请求，不保留图像分析方法配置；设置页不在“工作内容总结”里展示截图专属分析控件。
-- LM Studio 不在 `LLMService.send(_:)` 内隐式加载；所有业务入口必须先显式调用 `LMStudioModelLifecycle.load`，成功后再发 chat。
+- LM Studio 不在 `LLMService.send(_:)` 内隐式加载；启用显式 lifecycle 的业务入口必须先调用 `LMStudioModelLifecycle.load`，并把返回的 `instance_id` 贯穿后续 chat。由于 LM Studio 0.4.x 的 `/api/v1/chat` 会把同名 instance ID 当作模型名并重新加载，显式绑定请求改用 OpenAI-compatible `/v1/chat/completions`，其 `model` 字段使用该 ID；未由显式 load 拥有的请求继续使用 `/api/v1/chat` 和配置模型名。
 - 截屏分析 run 如果使用 LM Studio，只在 run 开始前加载一次分析模型，run 内多个截屏复用这次加载。
 - 设置页模型测试如果使用 LM Studio，顺序必须是 `load -> chat -> unload`。
 - 手动日报总结或普通补总结如果使用 LM Studio，顺序必须是 `load -> summary chat -> unload`。
@@ -93,6 +93,7 @@
   - 只有分析是 LM Studio：分析结束后先卸载，再跑总结。
   - 只有总结是 LM Studio：总结开始前加载，结束后卸载。
 - LM Studio 配置等价只比较 `ModelProvider.lmStudio.requestURL(from:)` 规范化后的 chat endpoint、trimmed `modelName`、`lmStudioContextLength`；API key 不参与等价判断，但各请求仍使用自己 profile 的 key。
+- 配置等价只用于 load 前判断分析实例能否交给总结；显式 load 后的运行时路由身份是规范化 endpoint + `instance_id`，`context_length` 仍随 chat 发送但不参与实例路由。当前可达的分析重试必须保持同一 ID。
 - 会被吞掉的运行时失败必须写入 `AppLogStore`：数据库、文件系统、截图、报告加载、模型请求和 LM Studio lifecycle 失败一般用 `level = .error`；取消、无可汇总活动、已不存在的 pending 文件等可恢复且用户可忽略的结果用 `level = .log`。
 - 允许不单独记录的 `try?` 只限解析候选/格式探测、fallback 分支探测、`Task.sleep` 取消等待这类低层细节；如果最终业务操作失败，应该由外层 service 写一条带上下文的日志。
 
@@ -107,7 +108,7 @@
 - 要排查暂停、卸载或 provider 异常：
   先打开菜单里的“显示日志”，再结合 `app_logs` 表确认错误和调试事件是否真的落库。
 - 用户手动暂停分析：
-  先看 `AnalysisRuntimeState.stoppingStage`，LM Studio 正确顺序应该是先取消当前生成，再在取消完成后调用 unload；如果没有已记录的 `instance_id`，`LMStudioModelLifecycle` 会读取 `/api/v1/models` 并按模型名和 context length 匹配 loaded instance；调试时优先筛选 `source = lm_studio` 的日志。
+  先看 `AnalysisRuntimeState.stoppingStage`，LM Studio 正确顺序应该是先取消当前生成，再在取消完成后用该 lifecycle 精确持有的 `instance_id` 调用 unload；只有手动 force-unload 等没有 owned ID 的既有路径才读取 `/api/v1/models` 并按模型名和 context length 匹配 loaded instance。调试时优先筛选 `source = lm_studio` 的日志。
 
 改动时容易漏的点：
 
@@ -115,7 +116,7 @@
 - 新增设置字段后，除了 `SettingsStore` 和 `SettingsView`，还要同步看测试里的手工初始化。
 - 文案或提示词改动通常同时落在 `AppLocalization.swift` 和对应 service。
 - LM Studio 请求格式或解析逻辑改动时，优先改 `LMStudioAPI.swift`，不要在两个 service 里各自复制一份。
-- LM Studio `/api/v1/chat` 的多模态文本项在不同版本里可能出现 `"text"` 和 `"message"` 两种 discriminator；项目里统一通过 `LMStudioAPI.fallbackMultimodalTextInputStyle` 做一次兼容重试，不要把这种重试散落到业务层。
+- 非显式 LM Studio `/api/v1/chat` 的多模态文本项在不同版本里可能出现 `"text"` 和 `"message"` 两种 discriminator；项目里统一通过 `LMStudioAPI.fallbackMultimodalTextInputStyle` 做一次兼容重试，不要把这种重试散落到业务层。显式实例绑定走 `/v1/chat/completions` 的 OpenAI-compatible `messages` 格式，不执行 v1 discriminator fallback。
 - OpenAI / Anthropic / Apple Intelligence 的请求或解析行为改动时，优先改 `LLMService.swift`，并同步更新 `docs/model-integration.md`。
 - 分析错误和调试日志相关改动时，要同时检查 `AppLogStore`、`MenuBarApp`、`AnalysisErrorsView.swift`、`docs/data-and-testing.md`。
 - 任何会读图片、跑 OCR、等待模型请求或循环处理大量截图的逻辑，都不要放回 `AnalysisService` 的主 actor 同步路径；优先放进 `AnalysisWorker`。图片 IO、解码、亮度计算和 OCR 这类同步 CPU/IO 工作要走 `AnalysisWorker` 的 cancellable background helper，不要新增裸 `Task.detached`，否则用户停止分析时取消无法传递到后台子任务。

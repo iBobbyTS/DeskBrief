@@ -301,7 +301,12 @@ final class AnalysisRunExecutor {
                 let itemStartTime = shouldMeasureDuration ? Date() : nil
 
                 do {
-                    let result = try await analysisWorker.analyzeImageDetailed(from: screenshot, settings: snapshot, prompt: run.prompt)
+                    let result = try await analysisWorker.analyzeImageDetailed(
+                        from: screenshot,
+                        settings: snapshot,
+                        prompt: run.prompt,
+                        lmStudioInstanceID: loadedAnalysisModel?.instanceID
+                    )
                     recordLMStudioModelInstanceIfNeeded(result.modelInstanceID, provider: snapshot.provider)
                     let response = result.response
 
@@ -390,7 +395,8 @@ final class AnalysisRunExecutor {
                                      inputMeanTokens: run.inputMeanTokens, inputMaxTokens: run.inputMaxTokens,
                                      outputMeanTokens: run.outputMeanTokens, outputMaxTokens: run.outputMaxTokens,
                                      averageItemDurationSeconds: nil, errorMessage: nil,
-                                     affectedDayStarts: [], dailyReportCandidateDayStarts: [], wasCancelled: true)
+                                     affectedDayStarts: [], dailyReportCandidateDayStarts: [], wasCancelled: true,
+                                     lmStudioInstanceID: loadedAnalysisModel?.instanceID)
         }
 
         if run.wasPausedAfterFailures {
@@ -405,7 +411,8 @@ final class AnalysisRunExecutor {
                                      inputMeanTokens: run.inputMeanTokens, inputMaxTokens: run.inputMaxTokens,
                                      outputMeanTokens: run.outputMeanTokens, outputMaxTokens: run.outputMaxTokens,
                                      averageItemDurationSeconds: nil, errorMessage: message,
-                                     affectedDayStarts: affectedDayStarts, dailyReportCandidateDayStarts: dailyReportCandidateDayStarts, wasCancelled: false)
+                                     affectedDayStarts: affectedDayStarts, dailyReportCandidateDayStarts: dailyReportCandidateDayStarts, wasCancelled: false,
+                                     lmStudioInstanceID: loadedAnalysisModel?.instanceID)
         }
 
         let finalStatus: String
@@ -427,7 +434,8 @@ final class AnalysisRunExecutor {
                                  inputMeanTokens: run.inputMeanTokens, inputMaxTokens: run.inputMaxTokens,
                                  outputMeanTokens: run.outputMeanTokens, outputMaxTokens: run.outputMaxTokens,
                                  averageItemDurationSeconds: nil, errorMessage: nil,
-                                 affectedDayStarts: affectedDayStarts, dailyReportCandidateDayStarts: dailyReportCandidateDayStarts, wasCancelled: false)
+                                 affectedDayStarts: affectedDayStarts, dailyReportCandidateDayStarts: dailyReportCandidateDayStarts, wasCancelled: false,
+                                 lmStudioInstanceID: loadedAnalysisModel?.instanceID)
     }
 
     private func loadModelIfNeeded(for settings: ModelProfileSettings) async throws -> LMStudioLoadedModel? {

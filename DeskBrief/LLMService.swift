@@ -26,6 +26,7 @@ struct LLMServiceRequest {
     let maximumResponseTokens: Int
     let timeoutInterval: TimeInterval
     let keychainAccount: String?
+    let lmStudioInstanceID: String?
     let appleUseCase: SystemLanguageModel.UseCase
     let appleSchema: GenerationSchema?
 
@@ -37,6 +38,7 @@ struct LLMServiceRequest {
         maximumResponseTokens: Int,
         timeoutInterval: TimeInterval,
         keychainAccount: String? = nil,
+        lmStudioInstanceID: String? = nil,
         appleUseCase: SystemLanguageModel.UseCase = .general,
         appleSchema: GenerationSchema? = nil
     ) {
@@ -47,6 +49,7 @@ struct LLMServiceRequest {
         self.maximumResponseTokens = maximumResponseTokens
         self.timeoutInterval = timeoutInterval
         self.keychainAccount = keychainAccount
+        self.lmStudioInstanceID = lmStudioInstanceID
         self.appleUseCase = appleUseCase
         self.appleSchema = appleSchema
     }
@@ -366,6 +369,10 @@ final class LLMService: @unchecked Sendable {
                 maximumResponseTokens: request.maximumResponseTokens
             )
         case .lmStudio:
+            if request.lmStudioInstanceID != nil,
+               let instanceBoundURL = LMStudioAPI.instanceBoundChatURL(from: request.settings.apiBaseURL) {
+                urlRequest.url = instanceBoundURL
+            }
             if !apiKey.isEmpty {
                 urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             }
@@ -428,6 +435,23 @@ final class LLMService: @unchecked Sendable {
                 tokenUsage: payload.tokenUsage
             )
         case .lmStudio:
+            if request.lmStudioInstanceID != nil {
+                let payload = try parseOpenAIResponse(from: requestResult.data)
+                return LLMServiceResponse(
+                    text: payload.content,
+                    structuredContent: nil,
+                    rawStructuredText: nil,
+                    finishReason: payload.finishReason,
+                    requestTiming: ModelRequestTiming(
+                        roundTripSeconds: requestResult.roundTripSeconds,
+                        serverProcessingSeconds: nil
+                    ),
+                    lmStudioTiming: nil,
+                    reasoningText: nil,
+                    modelInstanceID: request.lmStudioInstanceID,
+                    tokenUsage: payload.tokenUsage
+                )
+            }
             guard let payload = LMStudioAPI.parseChatResponse(from: requestResult.data) else {
                 throw LLMServiceError.invalidResponseFormat(.lmStudio)
             }
@@ -467,10 +491,23 @@ final class LLMService: @unchecked Sendable {
         request: LLMServiceRequest,
         urlRequest baseRequest: URLRequest
     ) async throws -> DataRequestResult {
+        if let instanceID = request.lmStudioInstanceID {
+            var urlRequest = baseRequest
+            urlRequest.httpBody = try LMStudioAPI.buildInstanceBoundChatRequestBody(
+                modelIdentifier: instanceID,
+                prompt: request.prompt,
+                imageData: request.imageData,
+                contextLength: request.settings.lmStudioContextLength,
+                maximumResponseTokens: request.maximumResponseTokens
+            )
+            return try await performDataRequest(for: urlRequest)
+        }
+
         var attemptedStyle = LMStudioMultimodalTextInputStyle.text
         var urlRequest = baseRequest
+        let modelIdentifier = request.lmStudioInstanceID ?? request.settings.modelName
         urlRequest.httpBody = try LMStudioAPI.buildChatRequestBody(
-            modelName: request.settings.modelName,
+            modelIdentifier: modelIdentifier,
             prompt: request.prompt,
             imageData: request.imageData,
             contextLength: request.settings.lmStudioContextLength,
@@ -494,7 +531,7 @@ final class LLMService: @unchecked Sendable {
 
         attemptedStyle = fallbackStyle
         urlRequest.httpBody = try LMStudioAPI.buildChatRequestBody(
-            modelName: request.settings.modelName,
+            modelIdentifier: modelIdentifier,
             prompt: request.prompt,
             imageData: request.imageData,
             contextLength: request.settings.lmStudioContextLength,

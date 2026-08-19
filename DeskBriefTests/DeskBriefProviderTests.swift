@@ -29,9 +29,28 @@ extension DeskBriefTests {
         #expect(url4?.absoluteString == "http://127.0.0.1:1234/api/v1/chat")
     }
 
+    @Test func lmStudioInstanceBoundURLAndBodyUseV0CompatibilityEndpoint() async throws {
+        #expect(
+            LMStudioAPI.instanceBoundChatURL(from: "http://127.0.0.1:1234")?.absoluteString
+                == "http://127.0.0.1:1234/v1/chat/completions"
+        )
+        let bodyData = try LMStudioAPI.buildInstanceBoundChatRequestBody(
+            modelIdentifier: "qwen3.5-0.8b-mlx",
+            prompt: "请总结当前工作",
+            imageData: nil,
+            contextLength: 12000,
+            maximumResponseTokens: 300
+        )
+        let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        #expect(body["model"] as? String == "qwen3.5-0.8b-mlx")
+        #expect(body["context_length"] as? Int == 12000)
+        #expect(body["max_tokens"] as? Int == 300)
+        #expect(body["messages"] is [[String: Any]])
+    }
+
     @Test func lmStudioTextOnlyChatRequestUsesPlainStringInput() async throws {
         let bodyData = try LMStudioAPI.buildChatRequestBody(
-            modelName: "qwen3.5-8b",
+            modelIdentifier: "qwen3.5-8b",
             prompt: "请总结今天的工作",
             imageData: nil,
             contextLength: 12000
@@ -69,7 +88,7 @@ extension DeskBriefTests {
 
     @Test func lmStudioMultimodalChatRequestUsesTextAndImageInputItems() async throws {
         let bodyData = try LMStudioAPI.buildChatRequestBody(
-            modelName: "qwen3.5-vl",
+            modelIdentifier: "qwen3.5-vl",
             prompt: "请根据图片分析当前工作",
             imageData: Data([0xFF, 0xD8, 0xFF]),
             contextLength: 8000
@@ -86,7 +105,7 @@ extension DeskBriefTests {
 
     @Test func lmStudioMultimodalChatRequestSupportsMessageInputItemsVariant() async throws {
         let bodyData = try LMStudioAPI.buildChatRequestBody(
-            modelName: "qwen3.5-vl",
+            modelIdentifier: "qwen3.5-vl",
             prompt: "请根据图片分析当前工作",
             imageData: Data([0xFF, 0xD8, 0xFF]),
             contextLength: 8000,
@@ -439,38 +458,25 @@ extension DeskBriefTests {
             apiKey: "lmstudio-key"
         )
         let session = makeMockSession { request in
-            #expect(request.url?.absoluteString == "http://127.0.0.1:1234/api/v1/chat")
+            #expect(request.url?.absoluteString == "http://127.0.0.1:1234/v1/chat/completions")
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer lmstudio-key")
 
             let requestBody = try #require(requestBodyData(from: request))
             let body = try #require(JSONSerialization.jsonObject(with: requestBody) as? [String: Any])
 
-            #expect(body["model"] as? String == "qwen3.5-8b")
-            #expect(body["input"] as? String == "请总结当前工作")
-            #expect(body["store"] as? Bool == false)
+            #expect(body["model"] as? String == "qwen3.5-8b-loaded-instance")
+            let messages = try #require(body["messages"] as? [[String: Any]])
+            #expect(messages.first?["content"] as? String == "请总结当前工作")
             #expect(body["context_length"] as? Int == expectedContextLength)
 
             let payload = """
             {
-              "model_instance_id": "lm-instance-001",
-              "output": [
-                {
-                  "type": "reasoning",
-                  "content": "Thinking Process:\\n\\n1. Review OCR content"
-                },
-                {
-                  "type": "message",
-                  "content": "{\\"category\\":\\"专注工作\\",\\"summary\\":\\"整理 provider 封装\\"}"
-                }
-              ],
-              "stats": {
-                "input_tokens": 91,
-                "total_output_tokens": 23,
-                "reasoning_output_tokens": 7,
-                "tokens_per_second": 46.0,
-                "time_to_first_token_seconds": 0.42,
-                "model_load_time_seconds": 0.18
-              }
+              "model": "qwen3.5-8b-loaded-instance",
+              "choices": [{
+                "message": {"role":"assistant","content":"{\\"category\\":\\"专注工作\\",\\"summary\\":\\"整理 provider 封装\\"}"},
+                "finish_reason": "stop"
+              }],
+              "usage": {"prompt_tokens":91,"completion_tokens":23,"total_tokens":114}
             }
             """
 
@@ -489,22 +495,22 @@ extension DeskBriefTests {
                 imageData: nil,
                 maximumResponseTokens: 300,
                 timeoutInterval: 120,
+                lmStudioInstanceID: "qwen3.5-8b-loaded-instance",
                 appleUseCase: .general,
                 appleSchema: nil
             )
         )
 
         #expect(response.text == #"{"category":"专注工作","summary":"整理 provider 封装"}"#)
-        #expect(response.modelInstanceID == "lm-instance-001")
-        #expect(response.reasoningText == "Thinking Process:\n\n1. Review OCR content")
+        #expect(response.modelInstanceID == "qwen3.5-8b-loaded-instance")
+        #expect(response.reasoningText == nil)
         #expect(response.tokenUsage?.inputTokens == 91)
         #expect(response.tokenUsage?.outputTokens == 23)
-        #expect(response.tokenUsage?.reasoningTokens == 7)
-        #expect(abs((response.lmStudioTiming?.timeToFirstTokenSeconds ?? 0) - 0.42) < 0.000_1)
-        #expect(abs((response.lmStudioTiming?.modelLoadTimeSeconds ?? 0) - 0.18) < 0.000_1)
+        #expect(response.tokenUsage?.reasoningTokens == nil)
+        #expect(response.lmStudioTiming == nil)
     }
 
-    @Test func llmServiceLMStudioMultimodalFallsBackToMessageDiscriminatorVariant() async throws {
+    @Test func llmServiceLMStudioInstanceBoundMultimodalUsesOpenAICompatibleBody() async throws {
         let settings = makeModelSettings(
             provider: .lmStudio,
             apiBaseURL: "http://127.0.0.1:1234",
@@ -521,46 +527,24 @@ extension DeskBriefTests {
 
             let requestBody = try #require(requestBodyData(from: request))
             let body = try #require(JSONSerialization.jsonObject(with: requestBody) as? [String: Any])
-            let input = try #require(body["input"] as? [[String: Any]])
+            #expect(request.url?.path == "/v1/chat/completions")
+            let messages = try #require(body["messages"] as? [[String: Any]])
+            let input = try #require(messages.first?["content"] as? [[String: Any]])
 
-            #expect(body["model"] as? String == "qwen3.5-vl")
+            #expect(body["model"] as? String == "qwen3.5-vl-loaded-instance")
             #expect(input.count == 2)
-            #expect(input[0]["content"] as? String == prompt)
-            #expect(input[1]["type"] as? String == "image")
+            #expect(input[0]["text"] as? String == prompt)
+            #expect(input[1]["type"] as? String == "image_url")
 
-            if MockURLProtocol.requestCount == 1 {
-                #expect(input[0]["type"] as? String == "text")
-                return try makeHTTPResponse(
-                    url: try #require(request.url),
-                    body: """
-                    {
-                      "error": {
-                        "message": "Invalid discriminator value. Expected 'message' | 'image'",
-                        "type": "invalid_request",
-                        "code": "invalid_union",
-                        "param": "input"
-                      }
-                    }
-                    """,
-                    statusCode: 400
-                )
-            }
-
-            #expect(MockURLProtocol.requestCount == 2)
-            #expect(input[0]["type"] as? String == "message")
             return try makeHTTPResponse(
                 url: try #require(request.url),
                 body: """
                 {
-                  "output": [
-                    {
-                      "type": "message",
-                      "content": "{\\"category\\":\\"专注工作\\",\\"summary\\":\\"兼容旧版 LM Studio 多模态输入格式\\"}"
-                    }
-                  ]
+                  "choices": [{"message": {"content": "{\\"category\\":\\"专注工作\\",\\"summary\\":\\"兼容 LM Studio 实例绑定多模态请求\\"}"}, "finish_reason":"stop"}]
                 }
                 """
             )
+
         }
 
         let service = LLMService(session: session)
@@ -572,13 +556,55 @@ extension DeskBriefTests {
                 imageData: imageData,
                 maximumResponseTokens: 300,
                 timeoutInterval: 120,
+                lmStudioInstanceID: "qwen3.5-vl-loaded-instance",
                 appleUseCase: .general,
                 appleSchema: nil
             )
         )
 
-        #expect(MockURLProtocol.requestCount == 2)
-        #expect(response.text == #"{"category":"专注工作","summary":"兼容旧版 LM Studio 多模态输入格式"}"#)
+        #expect(MockURLProtocol.requestCount == 1)
+        #expect(response.text?.contains("兼容 LM Studio 实例绑定多模态请求") == true)
+    }
+
+    @Test func llmServiceLMStudioInstanceFailureDoesNotFallBackToConfiguredModel() async throws {
+        let settings = makeModelSettings(
+            provider: .lmStudio,
+            apiBaseURL: "http://127.0.0.1:1234",
+            modelName: "configured-model",
+            apiKey: "lmstudio-key"
+        )
+        defer { MockURLProtocol.reset() }
+
+        let session = makeMockSession { request in
+            MockURLProtocol.requestCount += 1
+            let requestBody = try #require(requestBodyData(from: request))
+            let body = try #require(JSONSerialization.jsonObject(with: requestBody) as? [String: Any])
+            #expect(body["model"] as? String == "owned-instance-id")
+            return try makeHTTPResponse(
+                url: try #require(request.url),
+                body: #"{"error":{"message":"instance unavailable"}}"#,
+                statusCode: 404
+            )
+        }
+
+        do {
+            _ = try await LLMService(session: session).send(
+                LLMServiceRequest(
+                    settings: settings,
+                    appLanguage: .simplifiedChinese,
+                    prompt: "test",
+                    imageData: nil,
+                    maximumResponseTokens: 300,
+                    timeoutInterval: 120,
+                    lmStudioInstanceID: "owned-instance-id"
+                )
+            )
+            Issue.record("Expected instance-targeted LM Studio request to fail")
+        } catch let error as LLMServiceError {
+            #expect(error == .httpError(statusCode: 404, body: #"{"error":{"message":"instance unavailable"}}"#))
+        }
+
+        #expect(MockURLProtocol.requestCount == 1)
     }
 
     @Test func llmServicePropagatesCredentialReadFailureWithoutSendingRequest() async throws {

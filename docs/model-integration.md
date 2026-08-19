@@ -128,7 +128,7 @@ Daily report prompts are built from the day's category list and activity records
 - Remote configuration required.
 - Screenshot multimodal requests use chat-style messages with text plus `image_url`.
 - Text-only requests send a plain text message content.
-- Request parameters used by the app:
+- Unmanaged v1 request parameters used by the app:
   - `Authorization`
   - `model`
   - `messages`
@@ -159,11 +159,13 @@ Daily report prompts are built from the day's category list and activity records
 ### LM Studio
 
 - Remote configuration required.
-- Text-only requests send `input` as a plain string.
-- Multimodal screenshot requests prefer LM Studio v1 input items with one `"text"` item plus one `"image"` item.
-- Some LM Studio builds still validate the multimodal text item as `"message"` instead of `"text"`. The app detects the documented `invalid_union` input error and retries once with the alternate discriminator so both server variants keep working.
+- Unmanaged text-only requests send `input` as a plain string to LM Studio's native v1 endpoint.
+- Unmanaged multimodal screenshot requests prefer LM Studio v1 input items with one `"text"` item plus one `"image"` item.
+- Explicitly loaded instances use the OpenAI-compatible `/v1/chat/completions` endpoint because LM Studio 0.4.x may treat a native v1 `model` value equal to the load-returned default instance ID as a model key and create a second instance. These requests send the load-returned ID as `model` in `messages` format; text and image requests therefore remain bound to the loaded instance.
+- Some LM Studio builds still validate unmanaged v1 multimodal text as `"message"` instead of `"text"`. The app detects the documented `invalid_union` input error and retries once with the alternate discriminator.
 - The app passes a configurable `context_length`.
-- The app always sets `store: false`, so LM Studio does not persist request history and the app does not continue prior chats with `previous_response_id`.
+- When a feature explicitly loads a model, the instance-bound chat request's `model` field is the exact load-returned `instance_id`; only unmanaged chats use the configured model name. Analysis retries keep the same identifier.
+- Unmanaged native v1 requests set `store: false`, so the app does not continue prior chats with `previous_response_id`; instance-bound OpenAI-compatible chat-completions requests are stateless single-turn messages.
 - Timing diagnostics are surfaced more explicitly than for other providers.
 - LM Studio pause and unload diagnostics are also written into `app_logs` with source `lm_studio` so the log window can be used for local debugging.
 - Request parameters used by the app:
@@ -172,12 +174,10 @@ Daily report prompts are built from the day's category list and activity records
   - `input`
   - `store`
   - `context_length`
+- Explicit instance-bound OpenAI-compatible requests instead use `messages`, `max_tokens`, `context_length`, and `stream: false`.
 - Response fields normalized by the app:
-  - `model_instance_id`
-  - `output[].type`
-  - `output[].content`
-  - `stats`
-  - `response_id`
+  - Native v1 responses: `model_instance_id`, `output[].type`, `output[].content`, `stats`, `response_id`.
+  - Instance-bound OpenAI-compatible responses: `choices[].message.content`, `finish_reason`, and `usage`.
 
 ## LM Studio model lifecycle
 
@@ -188,6 +188,9 @@ Explicit lifecycle calls:
 - Load:
   `POST /api/v1/models/load`
   with `model`, `context_length`, and `echo_load_config: true`.
+- Chat after an explicit load:
+  `POST /v1/chat/completions`
+  with the load-returned `instance_id` in `model`, OpenAI-compatible `messages`, and the configured `context_length`.
 - Unload:
   `POST /api/v1/models/unload`
   with the loaded model `instance_id`.
@@ -197,10 +200,10 @@ Explicit lifecycle calls:
 
 Entry-point behavior:
 
-- Screenshot analysis loads the LM Studio analysis model once before a run and reuses it for all screenshots in that run when lifecycle management is enabled.
+- Screenshot analysis loads the LM Studio analysis model once before a run and uses that exact instance ID for all screenshots and retries in that run when lifecycle management is enabled.
 - The settings model test path uses `load -> chat -> unload` when the screenshot-analysis profile has lifecycle management enabled.
 - Independent daily-summary generation uses `load -> summary chat -> unload` when its profile is LM Studio and lifecycle management is enabled.
-- Automatic daily-summary generation after a screenshot-analysis run is queued through the global run coordinator so summary runtime state starts only after analysis runtime state is idle. The LM Studio handoff can still reuse, switch, or release the analysis model depending on the two model profiles and whether each profile has lifecycle management enabled.
+- Automatic daily-summary generation after a screenshot-analysis run is queued through the global run coordinator so summary runtime state starts only after analysis runtime state is idle. An equivalent analysis-owned instance is handed off by exact ID and remains authoritative even when the summary profile's own lifecycle toggle is disabled; otherwise the summary may load its own instance or run unmanaged according to its toggle.
 
 Automatic analysis-to-summary handoff rules:
 

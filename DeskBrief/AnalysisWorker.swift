@@ -116,6 +116,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
         at fileURL: URL,
         settings: AppSettingsSnapshot,
         prompt: String,
+        lmStudioInstanceID: String? = nil,
         allowLengthRetry: Bool = true,
         maxAttempts: Int = 3
     ) async throws -> AnalysisResponse {
@@ -123,6 +124,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
             at: fileURL,
             settings: settings,
             prompt: prompt,
+            lmStudioInstanceID: lmStudioInstanceID,
             allowLengthRetry: allowLengthRetry,
             maxAttempts: maxAttempts
         ).response
@@ -133,6 +135,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
         from imageData: Data,
         settings: AppSettingsSnapshot,
         prompt: String,
+        lmStudioInstanceID: String? = nil,
         allowLengthRetry: Bool = true,
         maxAttempts: Int = 3
     ) async throws -> AnalysisResponse {
@@ -140,6 +143,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
             from: imageData,
             settings: settings,
             prompt: prompt,
+            lmStudioInstanceID: lmStudioInstanceID,
             allowLengthRetry: allowLengthRetry,
             maxAttempts: maxAttempts
         ).response
@@ -150,6 +154,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
         from pending: PendingScreenshot,
         settings: AppSettingsSnapshot,
         prompt: String,
+        lmStudioInstanceID: String? = nil,
         allowLengthRetry: Bool = true,
         maxAttempts: Int = 3
     ) async throws -> AnalysisResponse {
@@ -157,6 +162,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
             from: pending,
             settings: settings,
             prompt: prompt,
+            lmStudioInstanceID: lmStudioInstanceID,
             allowLengthRetry: allowLengthRetry,
             maxAttempts: maxAttempts
         ).response
@@ -167,6 +173,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
         from pending: PendingScreenshot,
         settings: AppSettingsSnapshot,
         prompt: String,
+        lmStudioInstanceID: String? = nil,
         allowLengthRetry: Bool = true,
         maxAttempts: Int = 3
     ) async throws -> AnalysisExecutionResult {
@@ -181,6 +188,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
                 at: fileURL,
                 settings: settings,
                 prompt: prompt,
+                lmStudioInstanceID: lmStudioInstanceID,
                 allowLengthRetry: allowLengthRetry,
                 maxAttempts: maxAttempts
             )
@@ -194,6 +202,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
                 from: imageData,
                 settings: settings,
                 prompt: prompt,
+                lmStudioInstanceID: lmStudioInstanceID,
                 allowLengthRetry: allowLengthRetry,
                 maxAttempts: maxAttempts
             )
@@ -204,6 +213,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
         at fileURL: URL,
         settings: AppSettingsSnapshot,
         prompt: String,
+        lmStudioInstanceID: String? = nil,
         allowLengthRetry: Bool = true,
         maxAttempts: Int = 3
     ) async throws -> AnalysisExecutionResult {
@@ -215,6 +225,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
                     at: fileURL,
                     settings: settings,
                     prompt: prompt,
+                    lmStudioInstanceID: lmStudioInstanceID,
                     allowLengthRetry: allowLengthRetry
                 )
             } catch {
@@ -240,6 +251,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
         from imageData: Data,
         settings: AppSettingsSnapshot,
         prompt: String,
+        lmStudioInstanceID: String? = nil,
         allowLengthRetry: Bool = true,
         maxAttempts: Int = 3
     ) async throws -> AnalysisExecutionResult {
@@ -251,6 +263,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
                     from: imageData,
                     settings: settings,
                     prompt: prompt,
+                    lmStudioInstanceID: lmStudioInstanceID,
                     allowLengthRetry: allowLengthRetry
                 )
             } catch {
@@ -276,6 +289,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
         at fileURL: URL,
         settings: AppSettingsSnapshot,
         prompt: String,
+        lmStudioInstanceID: String?,
         allowLengthRetry: Bool
     ) async throws -> AnalysisExecutionResult {
         let imageData = try await imageData(from: fileURL)
@@ -283,12 +297,14 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
             from: imageData,
             settings: settings,
             prompt: prompt,
+            lmStudioInstanceID: lmStudioInstanceID,
             allowLengthRetry: allowLengthRetry
         ) { retryPrompt in
             try await self.analyzeImageAttemptDetailed(
                 at: fileURL,
                 settings: settings,
                 prompt: retryPrompt,
+                lmStudioInstanceID: lmStudioInstanceID,
                 allowLengthRetry: false
             )
         }
@@ -298,6 +314,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
         from imageData: Data,
         settings: AppSettingsSnapshot,
         prompt: String,
+        lmStudioInstanceID: String?,
         allowLengthRetry: Bool,
         lengthRetry: ((String) async throws -> AnalysisExecutionResult)? = nil
     ) async throws -> AnalysisExecutionResult {
@@ -368,6 +385,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
                     maximumResponseTokens: 300,
                     timeoutInterval: 120,
                     keychainAccount: AppDefaults.apiKeyAccount,
+                    lmStudioInstanceID: lmStudioInstanceID,
                     appleUseCase: .general,
                     appleSchema: nil
                 )
@@ -390,6 +408,7 @@ nonisolated final class AnalysisWorker: @unchecked Sendable {
                     from: imageData,
                     settings: settings,
                     prompt: retryPrompt,
+                    lmStudioInstanceID: lmStudioInstanceID,
                     allowLengthRetry: false
                 )
             }
